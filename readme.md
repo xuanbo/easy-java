@@ -418,6 +418,11 @@ JDK默认实现**比较适合cpu密集型任务**，对于IO密集型任务，�
     }
     ```
 
+具体代码见：
+
+* `tk.fishfish.easyjava.threadpool`：该包为线程池相关
+* `tk.fishfish.easyjava.threadpool.ThreadPoolTest`：线程池测试类
+
 参考：
 
 * [motan](https://github.com/weibocom/motan)
@@ -435,12 +440,32 @@ JDK默认实现**比较适合cpu密集型任务**，对于IO密集型任务，�
 使用注解`@Scheduled`即可，十分的方便，用于执行一些简单的、固定的任务。
 
 ```java
+package tk.fishfish.easyjava.task;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
 /**
- * 启动1分钟后，每隔1分钟执行一次
+ * 任务
+ *
+ * @author 奔波儿灞
+ * @since 1.0
  */
-@Scheduled(initialDelay = 1000 * 60, fixedDelay = 1000 * 60)
-public void doSomething() {
-    // 执行任务
+@Component
+public class Task {
+
+    private static final Logger LOG = LoggerFactory.getLogger(Task.class);
+
+    /**
+     * 启动1分钟后，每隔1分钟执行一次
+     */
+    @Scheduled(initialDelay = 1000 * 60, fixedDelay = 1000 * 60)
+    public void doSomething() {
+        LOG.info("doSomething...");
+    }
+
 }
 ```
 
@@ -455,6 +480,8 @@ public void doSomething() {
 下面是任务的配置，通过`ThreadPoolTaskScheduler`，我们可以设置是否等待任务结束再退出程序。
 
 ```java
+package tk.fishfish.easyjava.conf.task;
+
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -502,6 +529,8 @@ public class TaskConfiguration {
 通过自定义`TaskProperties`，我们可以通过配置文件定义线程池参数，而不需要改代码。
 
 ```java
+package tk.fishfish.easyjava.conf.task;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -579,6 +608,12 @@ task:
   wait-for-tasks-to-complete-on-shutdown: true
   thread-name-prefix: taskPool-
 ```
+
+具体代码见：
+
+* `tk.fishfish.easyjava.conf.task`：该包下的任务配置相关
+* `tk.fishfish.easyjava.task.Task`：任务类（demo）
+* `tk.fishfish.easyjava.task.TaskTest`：任务测试
 
 #### spring async
 

@@ -13,7 +13,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 线程池
+ * 线程池测试
  *
  * @author 奔波儿灞
  * @since 1.0
