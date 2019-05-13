@@ -62,6 +62,18 @@
 
 对于多模块依赖项目，请看[示例工程](https://github.com/xuanbo/parent)
 
+### 跳过测试
+
+在打包的时候，为了不跳过测试，可以使用命令：
+
+```shell
+> mvn clean package -DskipTests
+```
+
+其中：
+
+* `-DskipTests`参数用于跳过测试。
+
 ## 线程池
 
 根据阿里[p3c规范](https://github.com/alibaba/p3c)，推荐通过线程池来创建线程。
