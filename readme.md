@@ -6,6 +6,9 @@
 
 * [maven](#maven)
 * [线程池](#线程池)
+* [日志](#日志)
+* [测试](#测试)
+* [待续](#待续)
 
 ## maven
 
@@ -789,3 +792,296 @@ async:
 * `tk.fishfish.easyjava.async`：该包下为async测试相关
 
 完整探究过程，看我整理的[Spring Boot使用@Async](http://www.fishfish.tk/article/5)即可。
+
+## 日志
+
+我们应该**依赖日志接口，而不是具体的日志实现**。这样方便后期更换其他实现，而不需要改代码，虽然我们一般不会更改其他实现。哈哈！
+
+### 依赖
+
+我们应该使用`slf4j-api`这个日志接口，再根据实际情况选择`log4j`或`logback`作为日志的实现。
+
+这里主要以`logback`为例：
+
+```xml
+<!-- https://mvnrepository.com/artifact/org.slf4j/slf4j-api -->
+<dependency>
+    <groupId>org.slf4j</groupId>
+    <artifactId>slf4j-api</artifactId>
+    <version>1.7.25</version>
+</dependency>
+
+<!-- https://mvnrepository.com/artifact/ch.qos.logback/logback-classic -->
+<dependency>
+    <groupId>ch.qos.logback</groupId>
+    <artifactId>logback-classic</artifactId>
+    <version>1.2.3</version>
+</dependency>
+```
+
+由于`logback`已经依赖了`slf4j-api`，所以不需要再添加`slf4j-api`的依赖。这里为了演示，还是添加了。
+
+### 使用
+
+注意2点即可：
+
+* 导入`slf4j-api`的包
+* 占位符`{}`
+
+如下是一个示例：
+
+```java
+package tk.fishfish.easyjava.log;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * 测试日志
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class LogTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(LogTest.class);
+
+    @Test
+    public void debug() {
+        LOG.debug("debug示例，参数：{}", "值");
+    }
+
+}
+```
+
+### 日志配置
+
+这里仍以`logback`为例。
+
+默认情况下，上面的`LogTest`测试打印如下信息：
+
+```text
+10:54:17.709 [main] DEBUG tk.fishfish.easyjava.log.LogTest - debug示例，参数：值
+```
+
+我们可能想去自定义日志格式，具体的配置见`logback`的官网或者一些博客即可。
+
+下面主要介绍`logback`异步打印日志，并保存15天，日志文件最大50MB，是我在生产上用的常用的配置：
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration debug="false">
+    <!-- logback配置 -->
+    <!-- 日志保存路径 -->
+    <property name="logger.home" value="logs"/>
+    <!-- 日志文件名称 -->
+    <property name="logger.app" value="easy-java"/>
+    <!-- 日志级别 -->
+    <property name="logger.level" value="INFO"/>
+    <!-- 日志appender：STDOUT、FILE、ASYNC_FILE -->
+    <property name="logger.appender" value="ASYNC_FILE"/>
+
+    <!-- 标准输出 -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!--格式化输出：%-5level：级别从左显示5个字符宽度，%d表示日期，%thread表示线程名，%-50logger{50}：输入方法，%msg：日志消息，%n是换行符-->
+            <pattern>%highlight(%-5level) %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %cyan(%-50logger{50}) - %highlight(%msg%n)
+            </pattern>
+        </encoder>
+    </appender>
+
+    <!-- 按照每天生成日志文件 -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!--日志文件输出的文件名-->
+            <FileNamePattern>${logger.home}/${logger.app}.%d{yyyy-MM-dd}.log</FileNamePattern>
+            <!--日志文件保留天数-->
+            <MaxHistory>15</MaxHistory>
+        </rollingPolicy>
+        <layout class="ch.qos.logback.classic.PatternLayout">
+            <!--格式化输出：%-5level：级别从左显示5个字符宽度，%d表示日期，%thread表示线程名，%-50logger{50}：输入方法，%msg：日志消息，%n是换行符-->
+            <pattern>%highlight(%-5level) %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %cyan(%-50logger{50}) - %highlight(%msg%n)
+            </pattern>
+        </layout>
+        <!--日志文件最大的大小-->
+        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+            <MaxFileSize>50MB</MaxFileSize>
+        </triggeringPolicy>
+    </appender>
+
+    <!-- 异步输出日志 -->
+    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <!-- 不丢失日志.默认的,如果队列的80%已满,则会丢弃TRACT、DEBUG、INFO级别的日志 -->
+        <discardingThreshold>0</discardingThreshold>
+        <!-- 更改默认的队列的深度,该值会影响性能.默认值为256 -->
+        <queueSize>1024</queueSize>
+        <!-- 添加附加的appender,最多只能添加一个 -->
+        <appender-ref ref="FILE"/>
+    </appender>
+
+    <!-- 日志输出级别 -->
+    <root level="${logger.level}">
+        <appender-ref ref="${logger.appender}"/>
+    </root>
+</configuration>
+```
+
+具体配置见：
+
+* `/src/main/resources/logback-spring.xml`：日志配置文件
+
+### spring-boot集成
+
+在spring-boot中则配置如下即可：
+
+```yml
+# 日志配置
+logging:
+  level:
+    # 全局日志级别
+    root: info
+  # 日志配置文件
+  config: classpath:logback-spring.xml
+```
+
+主要是通过`logging.config`指定配置文件的路径。
+
+## 测试
+
+写代码的时候，还是不要太自信，写点单元测试测试下。
+
+### junit
+
+平时用的最为广泛的就是`junit`了。
+
+```xml
+<dependency>
+    <groupId>junit</groupId>
+    <artifactId>junit</artifactId>
+    <version>4.12</version>
+    <scope>test</scope>
+</dependency>
+```
+
+下面是简单的使用：
+
+```java
+package tk.fishfish.easyjava.threadpool;
+
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * 线程池测试
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class ThreadPoolTest {
+
+    private ExecutorService threadPool;
+
+    @Before
+    public void setup() {
+        int corePoolSize = 5;
+        int maxPoolSize = 10;
+        long keepAliveTime = 5;
+        TimeUnit unit = TimeUnit.MINUTES;
+        int workQueueSize = 1000;
+        BlockingQueue<Runnable> workQueue = new LinkedBlockingDeque<>(workQueueSize);
+        ThreadFactory threadFactory = new DefaultThreadFactory("threadPool");
+        RejectedExecutionHandler handler = new ThreadPoolExecutor.CallerRunsPolicy();
+        threadPool = new ThreadPoolExecutor(
+                corePoolSize, maxPoolSize,
+                keepAliveTime, unit,
+                workQueue,
+                threadFactory,
+                handler
+        );
+    }
+
+    @Test
+    public void run() throws InterruptedException {
+        threadPool.execute(() -> System.out.println("run!!!"));
+        // 为了等待线程池执行完
+        Thread.sleep(3 * 1000);
+    }
+
+    @After
+    public void cleanup() {
+        threadPool.shutdown();
+    }
+
+}
+```
+
+其中：
+
+* `@Test`注解是测试的具体方法
+* `@Before`注解会在初始调用，用于初始化
+* `@After`注解会在结束调用，用于清理资源
+
+具体代码见：
+
+* `tk.fishfish.easyjava.threadpool.ThreadPoolTest`：线程池测试
+
+### spring-boot测试
+
+在spring-boot中使用测试比较简单，需要添加`spring-boot-starter-test`依赖：
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-test</artifactId>
+    <version>${spring.boot.version}</version>
+    <scope>test</scope>
+</dependency>
+```
+
+测试类需要添加注解`@SpringBootTest`、`@RunWith`，如下：
+
+```java
+package tk.fishfish.easyjava.log;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.junit4.SpringRunner;
+
+/**
+ * 测试日志
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+@SpringBootTest
+@RunWith(SpringRunner.class)
+public class MyLogTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(MyLogTest.class);
+
+    @Test
+    public void info() {
+        LOG.info("info示例，参数：{}", "值");
+    }
+
+}
+```
+
+具体代码见：
+
+* `tk.fishfish.easyjava.logMyLogTest`：测试日志
+
+## 待续

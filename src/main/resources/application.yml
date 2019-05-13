@@ -15,3 +15,11 @@ async:
   keep-alive-seconds: 60
   wait-for-tasks-to-complete-on-shutdown: true
   thread-name-prefix: asyncPool-
+
+# 日志配置
+logging:
+  level:
+    # 全局日志级别
+    root: info
+  # 日志配置文件
+  config: classpath:logback-spring.xml
