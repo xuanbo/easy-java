@@ -4,6 +4,14 @@ server:
 # 任务线程池
 task:
   pool-size: 2
-  keep-alive-seconds: 60
   wait-for-tasks-to-complete-on-shutdown: true
   thread-name-prefix: taskPool-
+
+# async线程池
+async:
+  core-pool-size: 2
+  max-pool-size: 2
+  queue-capacity: 100
+  keep-alive-seconds: 60
+  wait-for-tasks-to-complete-on-shutdown: true
+  thread-name-prefix: asyncPool-

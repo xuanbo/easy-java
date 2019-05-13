@@ -437,7 +437,7 @@ JDK默认实现**比较适合cpu密集型任务**，对于IO密集型任务，�
 
 #### spring task
 
-使用注解`@Scheduled`即可，十分的方便，用于执行一些简单的、固定的任务。
+使用注解`@Scheduled`即可（`@EnableScheduling`开启），十分的方便，用于执行一些简单的、固定的任务。
 
 ```java
 package tk.fishfish.easyjava.task;
@@ -550,11 +550,6 @@ public class TaskProperties {
     private int poolSize = 1;
 
     /**
-     * 线程空闲时间
-     */
-    private int keepAliveSeconds = 60;
-
-    /**
      * 是否等待任务结束再退出
      */
     private boolean waitForTasksToCompleteOnShutdown = true;
@@ -570,6 +565,183 @@ public class TaskProperties {
 
     public void setPoolSize(int poolSize) {
         this.poolSize = poolSize;
+    }
+
+    public boolean isWaitForTasksToCompleteOnShutdown() {
+        return waitForTasksToCompleteOnShutdown;
+    }
+
+    public void setWaitForTasksToCompleteOnShutdown(boolean waitForTasksToCompleteOnShutdown) {
+        this.waitForTasksToCompleteOnShutdown = waitForTasksToCompleteOnShutdown;
+    }
+
+    public String getThreadNamePrefix() {
+        return threadNamePrefix;
+    }
+
+    public void setThreadNamePrefix(String threadNamePrefix) {
+        this.threadNamePrefix = threadNamePrefix;
+    }
+}
+```
+
+例如，在配置文件中：
+
+```yml
+# 任务线程池
+task:
+  pool-size: 2
+  wait-for-tasks-to-complete-on-shutdown: true
+  thread-name-prefix: taskPool-
+```
+
+具体代码见：
+
+* `tk.fishfish.easyjava.conf.task`：该包下为任务配置相关
+* `tk.fishfish.easyjava.task.Task`：任务类（demo）
+* `tk.fishfish.easyjava.task.TaskTest`：任务测试
+
+#### spring async
+
+我们可以通过在方法上面添加`@Async`，将方法异步化（`@EnableAsync`注解开启异步）。即方法会提交到异步线程池中执行，比较适合耗时的任务，而前端又需要立即返回。
+
+```java
+@Service
+public class AsyncServiceImpl implements AsyncService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(AsyncServiceImpl.class);
+
+    @Override
+    @Async
+    public void doSomething() {
+        // 做些什么
+        LOG.info("doSomething...");
+    }
+
+}
+```
+
+当然，与task类似的是，我们也可以自定义异步执行的线程池。
+
+其实只要配置一个类型为`TaskExecutor`，bean的名称为`taskExecutor`的Bean即可。
+
+```java
+package tk.fishfish.easyjava.conf.async;
+
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+
+import java.util.concurrent.ThreadPoolExecutor;
+
+/**
+ * async配置
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+@Configuration
+@EnableAsync
+@EnableConfigurationProperties(AsyncProperties.class)
+public class AsyncConfiguration {
+
+    /**
+     * 类型为`TaskExecutor`，bean的名称为`taskExecutor`的Bean
+     *
+     * @return TaskExecutor
+     */
+    @Bean
+    public TaskExecutor taskExecutor(AsyncProperties properties) {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        // 线程池前缀，可以随意指定。
+        executor.setThreadNamePrefix(properties.getThreadNamePrefix());
+        // 设置线程池参数
+        executor.setCorePoolSize(properties.getCorePoolSize());
+        executor.setMaxPoolSize(properties.getMaxPoolSize());
+        executor.setQueueCapacity(properties.getQeueCapacity());
+        executor.setKeepAliveSeconds(properties.getKeepAliveSeconds());
+        executor.setWaitForTasksToCompleteOnShutdown(properties.isWaitForTasksToCompleteOnShutdown());
+        // 设置拒绝策略，由调用者执行
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        return executor;
+    }
+
+}
+```
+
+其中，`AsyncProperties`封装了线程池相关参数，方便使用配置文件灵活配置：
+
+```java
+package tk.fishfish.easyjava.conf.async;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+/**
+ * async properties
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+@ConfigurationProperties(AsyncProperties.PREFIX)
+public class AsyncProperties {
+
+    public static final String PREFIX = "async";
+
+    /**
+     * 核心线程数
+     */
+    private int corePoolSize = 1;
+
+    /**
+     * 最大线程数
+     */
+    private int maxPoolSize = 10;
+
+    /**
+     * 队列容量
+     */
+    private int queueCapacity = 100;
+
+    /**
+     * 线程空闲时间
+     */
+    private int keepAliveSeconds = 60;
+
+    /**
+     * 是否等待任务结束再退出
+     */
+    private boolean waitForTasksToCompleteOnShutdown = true;
+
+    /**
+     * 线程前缀
+     */
+    private String threadNamePrefix = PREFIX;
+
+    public int getCorePoolSize() {
+        return corePoolSize;
+    }
+
+    public void setCorePoolSize(int corePoolSize) {
+        this.corePoolSize = corePoolSize;
+    }
+
+    public int getMaxPoolSize() {
+        return maxPoolSize;
+    }
+
+    public void setMaxPoolSize(int maxPoolSize) {
+        this.maxPoolSize = maxPoolSize;
+    }
+
+    public int getQueueCapacity() {
+        return queueCapacity;
+    }
+
+    public void setQueueCapacity(int queueCapacity) {
+        this.queueCapacity = queueCapacity;
     }
 
     public int getKeepAliveSeconds() {
@@ -601,62 +773,19 @@ public class TaskProperties {
 例如，在配置文件中：
 
 ```yml
-# 任务线程池
-task:
-  pool-size: 2
+# async线程池
+async:
+  core-pool-size: 2
+  max-pool-size: 2
+  queue-capacity: 100
   keep-alive-seconds: 60
   wait-for-tasks-to-complete-on-shutdown: true
-  thread-name-prefix: taskPool-
+  thread-name-prefix: asyncPool-
 ```
 
 具体代码见：
 
-* `tk.fishfish.easyjava.conf.task`：该包下的任务配置相关
-* `tk.fishfish.easyjava.task.Task`：任务类（demo）
-* `tk.fishfish.easyjava.task.TaskTest`：任务测试
-
-#### spring async
-
-我们可以通过在方法上面添加`@Async`，将方法异步化（`@EnableAsync`注解开启异步）。即方法会提交到异步线程池中执行，比较适合耗时的任务，而前端又需要立即返回。
-
-```java
-@Service
-public class DempServiceImpl implements DemoService {
-
-    private static final Logger LOG = LoggerFactory.getLogger(DempServiceImpl.class);
-
-    @Async
-    public void say() {
-        try {
-            LOG.info("say start");
-            // 模拟执行很久的一个任务
-            Thread.sleep(10000);
-            LOG.info("say end");
-        } catch (InterruptedException e) {
-            LOG.error(e.getMessage(), e);
-        }
-    }
-}
-```
-
-当然，与task类似的是，我们也可以自定义异步执行的线程池。
-
-其实只要配置一个类型为`TaskExecutor`，bean的名称为`taskExecutor`的Bean即可。
-
-```java
-@Bean
-public TaskExecutor taskExecutor() {
-    ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-    // 线程池前缀，可以随意指定。
-    executor.setThreadNamePrefix("myAsyncExecutor");
-    // 设置线程池参数
-    executor.setCorePoolSize(1);
-    executor.setMaxPoolSize(2);
-    executor.setQueueCapacity(100);
-    // 设置拒绝策略，由调用者执行
-    executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
-    return executor;
-}
-```
+* `tk.fishfish.easyjava.conf.async`：该包下为async配置相关
+* `tk.fishfish.easyjava.async`：该包下为async测试相关
 
 完整探究过程，看我整理的[Spring Boot使用@Async](http://www.fishfish.tk/article/5)即可。

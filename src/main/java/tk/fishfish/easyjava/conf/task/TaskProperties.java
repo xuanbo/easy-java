@@ -19,11 +19,6 @@ public class TaskProperties {
     private int poolSize = 1;
 
     /**
-     * 线程空闲时间
-     */
-    private int keepAliveSeconds = 60;
-
-    /**
      * 是否等待任务结束再退出
      */
     private boolean waitForTasksToCompleteOnShutdown = true;
@@ -39,14 +34,6 @@ public class TaskProperties {
 
     public void setPoolSize(int poolSize) {
         this.poolSize = poolSize;
-    }
-
-    public int getKeepAliveSeconds() {
-        return keepAliveSeconds;
-    }
-
-    public void setKeepAliveSeconds(int keepAliveSeconds) {
-        this.keepAliveSeconds = keepAliveSeconds;
     }
 
     public boolean isWaitForTasksToCompleteOnShutdown() {
