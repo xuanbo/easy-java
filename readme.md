@@ -11,6 +11,7 @@
 
 * [maven](#maven)
 * [线程池](#线程池)
+* [spring-boot](#spring-boot)
 * [日志](#日志)
 * [测试](#测试)
 * [数据库连接池](#数据库连接池)
@@ -810,6 +811,76 @@ async:
 * `tk.fishfish.easyjava.async`：该包下为async测试相关
 
 完整探究过程，看我整理的[Spring Boot使用@Async](http://www.fishfish.tk/article/5)即可。
+
+## spring-boot
+
+关于`spring-boot`，网上有太多的教程，这里只介绍一些基本的操作。
+
+对于web项目，依赖`spring-boot-starter-web`：
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+    <version>${spring.boot.version}</version>
+</dependency>
+```
+
+启动入口：
+
+```java
+package tk.fishfish.easyjava;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+/**
+ * 入口
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+@SpringBootApplication
+public class Application {
+
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+
+}
+```
+
+写个controller：
+
+```java
+package tk.fishfish.easyjava.controller;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * demo Controller
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+@RestController
+public class DemoController {
+
+    @GetMapping
+    public ResponseEntity<String> echo() {
+        return ResponseEntity.ok("easy java");
+    }
+
+}
+```
+
+这样一个REST服务接口就完成了，接下来你需要自行阅读其他文章深造，这里推荐：
+
+* [纯洁的微笑](http://www.ityouknow.com/)
+* [spring-boot-guider
+](https://github.com/xuanbo/spring-boot-guider)，这个是我总结的spring-boot(基于1.5.10.RELEAS)入门，适合学习mybatis、reids、mongodb集成
 
 ## 日志
 
