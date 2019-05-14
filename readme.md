@@ -1330,7 +1330,6 @@ public class JdbcTemplateTest {
         LOG.info("tables: {}", tables);
     }
 
-
 }
 ```
 
@@ -1388,5 +1387,9 @@ spring:
 * `tk.fishfish.easyjava.datasource.Demo`：实体
 * `tk.fishfish.easyjava.datasource.repository.DemoRepository`：DAO
 * `tk.fishfish.easyjava.datasource.DemoRepositoryTest`：DAO测试
+
+建议阅读：
+
+* [boot-features-jpa-and-spring-data](https://docs.spring.io/spring-boot/docs/2.0.0.RELEASE/reference/htmlsingle/#boot-features-jpa-and-spring-data)
 
 ## 待续

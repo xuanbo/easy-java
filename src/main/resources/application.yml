@@ -25,7 +25,7 @@ spring:
       elide-set-auto-commits: true
       maintain-time-stats: false
   jpa:
-    database-platform: org.hibernate.dialect.MySQL5Dialect
+    database-platform: org.hibernate.dialect.MySQL5InnoDBDialect
     show-sql: true
     hibernate:
       ddl-auto: update
