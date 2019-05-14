@@ -2,12 +2,18 @@
 
 整理java技术要点，让java更简单，更容易上手。
 
+## 约定
+
+* `spring-boot`集成默认是2.x
+* `MySQL`数据库默认编码为`utf8mb4`
+
 ## 导航
 
 * [maven](#maven)
 * [线程池](#线程池)
 * [日志](#日志)
 * [测试](#测试)
+* [数据库连接池](#数据库连接池)
 * [待续](#待续)
 
 ## maven
@@ -898,8 +904,7 @@ public class LogTest {
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <!--格式化输出：%-5level：级别从左显示5个字符宽度，%d表示日期，%thread表示线程名，%-50logger{50}：输入方法，%msg：日志消息，%n是换行符-->
-            <pattern>%highlight(%-5level) %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %cyan(%-50logger{50}) - %highlight(%msg%n)
-            </pattern>
+            <pattern>%highlight(%-5level) %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %cyan(%-50logger{50}) - %highlight(%msg%n)</pattern>
         </encoder>
     </appender>
 
@@ -913,8 +918,7 @@ public class LogTest {
         </rollingPolicy>
         <layout class="ch.qos.logback.classic.PatternLayout">
             <!--格式化输出：%-5level：级别从左显示5个字符宽度，%d表示日期，%thread表示线程名，%-50logger{50}：输入方法，%msg：日志消息，%n是换行符-->
-            <pattern>%highlight(%-5level) %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %cyan(%-50logger{50}) - %highlight(%msg%n)
-            </pattern>
+            <pattern>%highlight(%-5level) %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %cyan(%-50logger{50}) - %highlight(%msg%n)</pattern>
         </layout>
         <!--日志文件最大的大小-->
         <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
@@ -1095,5 +1099,294 @@ public class MyLogTest {
 具体代码见：
 
 * `tk.fishfish.easyjava.logMyLogTest`：测试日志
+
+## 数据库连接池
+
+数据库连接池有很多成熟的产品，譬如`c3p0`、`dbcp`，国内的`druid`等。
+
+但是这些数据库连接池这里不做介绍，这里介绍[HikariCP](https://github.com/brettwooldridge/HikariCP)。
+
+### MySQL编码
+
+用`MySQL`的朋友们请不要使用`utf8`，请使用`utf8mb4`。
+
+推荐阅读：
+
+* [永远不要在MySQL中使用utf8，改用utf8mb4](https://blog.csdn.net/u010584271/article/details/80835547)
+* [java-msql utf-8mb4 解决emoji存储问题](https://blog.csdn.net/liudongroot/article/details/78568986)
+* [JDBC对Mysql utf8mb4字符集的处理](https://blog.csdn.net/liuge36/article/details/80964339)
+
+警告：**后文默认使用了`utf8mb4`编码**。
+
+### HikariCP
+
+依赖：
+
+```xml
+<dependency>
+    <groupId>com.zaxxer</groupId>
+    <artifactId>HikariCP</artifactId>
+    <version>3.3.1</version>
+</dependency>
+
+<!-- MySQL驱动（可选） -->
+<dependency>
+    <groupId>mysql</groupId>
+    <artifactId>mysql-connector-java</artifactId>
+    <version>5.1.46</version>
+</dependency>
+```
+
+推荐阅读：
+
+* [initialization](https://github.com/brettwooldridge/HikariCP#initialization)
+* [MySQL Performance Tips](https://github.com/brettwooldridge/HikariCP/wiki/MySQL-Configuration)
+
+测试：
+
+```java
+package tk.fishfish.easyjava.datasource;
+
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+import org.junit.Before;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
+/**
+ * Hikari测试
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class HikariTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(HikariTest.class);
+
+    private DataSource dataSource;
+
+    @Before
+    public void setup() {
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl("jdbc:mysql://localhost:3306/easyjava?useSSL=false&useUnicode=true&characterEncoding=utf-8");
+        config.setUsername("root");
+        config.setPassword("123456");
+        config.setMinimumIdle(8);
+        config.setMaximumPoolSize(32);
+        // MySQL数据库编码设置为utf8mb4
+        config.addDataSourceProperty("connectionInitSql", "set names utf8mb4;");
+        // MySQL推荐配置
+        config.addDataSourceProperty("cachePrepStmts", true);
+        config.addDataSourceProperty("prepStmtCacheSize", 250);
+        config.addDataSourceProperty("prepStmtCacheSqlLimit", 2048);
+        config.addDataSourceProperty("useServerPrepStmts", true);
+        config.addDataSourceProperty("useLocalSessionState", true);
+        config.addDataSourceProperty("rewriteBatchedStatements", true);
+        config.addDataSourceProperty("cacheResultSetMetadata", true);
+        config.addDataSourceProperty("cacheServerConfiguration", true);
+        config.addDataSourceProperty("elideSetAutoCommits", true);
+        config.addDataSourceProperty("maintainTimeStats", false);
+
+        dataSource = new HikariDataSource(config);
+    }
+
+    @Test
+    public void run() {
+        Connection connection = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            connection = dataSource.getConnection();
+            ps = connection.prepareStatement("show tables");
+            rs = ps.executeQuery();
+            while (rs.next()) {
+                String table = rs.getString(1);
+                LOG.info("table: {}", table);
+            }
+        } catch (SQLException e) {
+            LOG.error("数据库异常", e);
+        }
+        // 释放
+        if (rs != null) {
+            try {
+                rs.close();
+            } catch (SQLException e) {
+                LOG.error("数据库ResultSet关闭异常", e);
+            }
+        }
+        if (ps != null) {
+            try {
+                ps.close();
+            } catch (SQLException e) {
+                LOG.error("数据库PreparedStatement关闭异常", e);
+            }
+        }
+        if (connection != null) {
+            try {
+                connection.close();
+            } catch (SQLException e) {
+                LOG.error("数据库连接关闭异常", e);
+            }
+        }
+    }
+
+}
+```
+
+具体代码见：
+
+* `tk.fishfish.easyjava.datasource.HikariTest`：Hikari测试
+
+### spring-boot
+
+其实从`spring-boot-2.0`开始，`HikariCP`就已经作为默认的数据库连接池了。
+
+如果你使用`spring-boot-starter-jdbc`或 `spring-boot-starter-data-jpa`，会自动添加对`HikariCP`的依赖。
+
+#### spring-boot-starter-jdbc
+
+依赖：
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-jdbc</artifactId>
+    <version>${spring.boot.version}</version>
+</dependency>
+```
+
+配置：
+
+```yml
+spring:
+  datasource:
+    driver-class-name: com.mysql.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/easyjava?useSSL=false&useUnicode=true&characterEncoding=utf-8
+    username: root
+    password: 123456
+    # 参数配置
+    hikari:
+      pool-name: hikariPool
+      minimum-idle: 8
+      maximum-pool-size: 50
+      # 初始化时设置编码
+      connection-init-sql: set names utf8mb4;
+      cache-prep-stmts: true
+      prep-stmt-cache-size: 250
+      prep-stmt-cache-sql-limit: 2048
+      use-server-prep-stmts: true
+      use-local-session-state: true
+      rewrite-batched-statements: true
+      cache-result-set-metadata: true
+      cache-server-configuration: true
+      elide-set-auto-commits: true
+      maintain-time-stats: false
+```
+
+配置之后，会默认配置好数据源以及`jdbcTemplate`。
+
+下面是`jdbcTemplate`使用：
+
+```java
+package tk.fishfish.easyjava.datasource;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.junit4.SpringRunner;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 测试jdbcTemplate
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+@SpringBootTest
+@RunWith(SpringRunner.class)
+public class JdbcTemplateTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(JdbcTemplateTest.class);
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Test
+    public void run() {
+        List<Map<String, Object>> tables = jdbcTemplate.queryForList("show tables");
+        LOG.info("tables: {}", tables);
+    }
+
+
+}
+```
+
+测试代码见：
+
+* `tk.fishfish.easyjava.datasource.JdbcTemplateTest`：测试jdbcTemplate
+
+#### spring-boot-starter-data-jpa
+
+依赖：
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-jpa</artifactId>
+    <version>${spring.boot.version}</version>
+</dependency>
+```
+
+配置：
+
+```yml
+spring:
+  datasource:
+    driver-class-name: com.mysql.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/easyjava?useSSL=false&useUnicode=true&characterEncoding=utf-8
+    username: root
+    password: 123456
+    # 参数配置
+    hikari:
+      pool-name: hikariPool
+      minimum-idle: 8
+      maximum-pool-size: 50
+      # 初始化时设置编码
+      connection-init-sql: set names utf8mb4;
+      cache-prep-stmts: true
+      prep-stmt-cache-size: 250
+      prep-stmt-cache-sql-limit: 2048
+      use-server-prep-stmts: true
+      use-local-session-state: true
+      rewrite-batched-statements: true
+      cache-result-set-metadata: true
+      cache-server-configuration: true
+      elide-set-auto-commits: true
+      maintain-time-stats: false
+  jpa:
+    database-platform: org.hibernate.dialect.MySQL5Dialect
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+```
+
+具体的测试代码见：
+
+* `tk.fishfish.easyjava.datasource.Demo`：实体
+* `tk.fishfish.easyjava.datasource.repository.DemoRepository`：DAO
+* `tk.fishfish.easyjava.datasource.DemoRepositoryTest`：DAO测试
 
 ## 待续

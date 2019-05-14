@@ -1,6 +1,35 @@
 server:
   port: 8080
 
+spring:
+  datasource:
+    driver-class-name: com.mysql.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/easyjava?useSSL=false&useUnicode=true&characterEncoding=utf-8
+    username: root
+    password: 123456
+    # 参数配置
+    hikari:
+      pool-name: hikariPool
+      minimum-idle: 8
+      maximum-pool-size: 50
+      # 初始化时设置编码
+      connection-init-sql: set names utf8mb4;
+      cache-prep-stmts: true
+      prep-stmt-cache-size: 250
+      prep-stmt-cache-sql-limit: 2048
+      use-server-prep-stmts: true
+      use-local-session-state: true
+      rewrite-batched-statements: true
+      cache-result-set-metadata: true
+      cache-server-configuration: true
+      elide-set-auto-commits: true
+      maintain-time-stats: false
+  jpa:
+    database-platform: org.hibernate.dialect.MySQL5Dialect
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+
 # 任务线程池
 task:
   pool-size: 2
