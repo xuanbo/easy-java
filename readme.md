@@ -15,6 +15,10 @@
 * [日志](#日志)
 * [测试](#测试)
 * [数据库连接池](#数据库连接池)
+* [Excel导入导出](#Excel导入导出)
+* [Kafka](#Kafka)
+* [Hive](#Hive)
+* [HBase](#HBase)
 * [待续](#待续)
 
 ## maven
@@ -1462,5 +1466,29 @@ spring:
 建议阅读：
 
 * [boot-features-jpa-and-spring-data](https://docs.spring.io/spring-boot/docs/2.0.0.RELEASE/reference/htmlsingle/#boot-features-jpa-and-spring-data)
+
+## Excel导入导出
+
+这里不推荐直接使用`poi`，推荐使用阿里巴巴封装的[easyexcel](https://github.com/alibaba/easyexcel)组件。
+
+关于`easyexcel`的使用，这里就不做介绍，直接看官方文档即可。
+
+## Kafka
+
+可以先看下官方文档，然后运行我之前写的例子，来进行入门。
+
+* [官方介绍](http://kafka.apache.org/intro)
+* [kafka-example](https://github.com/xuanbo/kafka-example)
+
+当然，阅读其他关于`kafka`的技术文章均可，但是建议过一遍官网。
+因为，技术文章可能过时啦！
+
+## Hive
+
+待续
+
+## HBase
+
+待续
 
 ## 待续
