@@ -16,6 +16,7 @@
 * [测试](#测试)
 * [数据库连接池](#数据库连接池)
 * [ORM](#ORM)
+* [Redis](#Redis)
 * [Excel导入导出](#Excel导入导出)
 * [Kafka](#Kafka)
 * [Hive](#Hive)
@@ -1498,6 +1499,377 @@ spring:
 `mybatis-plus`包含上述2个插件的功能，还有其他附加功能。
 
 大家灵活选择合适的插件即可。
+
+## Redis
+
+这里推荐几个`redis`客户端：
+
+* `jedis`：老牌客户端
+* `lettuce`：新生客户端，提供异步操作，`redis`各种模式
+* `redisson`：不仅仅是客户端了，还提供基于`redis`的一系列生态（分布式锁、集合等）
+
+### spring-boot-starter-data-redis
+
+从`spring-boot2.x`开始，已经将`lettuce`作为默认的`redis`操作的底层实现了。
+
+依赖：
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-redis</artifactId>
+    <version>${spring.boot.version}</version>
+</dependency>
+```
+
+默认情况下，`spring-boot`会为我们配置`StringRedisTemplate`和`RedisTemplate<Object, Object>`这两个bean。
+
+配置（Redis单实例）：
+
+```yml
+spring:
+  redis:
+    database: 1
+    host: 127.0.0.1
+    port: 6379
+    password:
+    timeout: 3000
+    lettuce:
+      port:
+        max-active: 16
+        max-idle: 8
+        min-idle: 4
+        max-wait: 50ms
+```
+
+测试：
+
+```java
+package tk.fishfish.easyjava.redis;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.BoundValueOperations;
+import org.springframework.data.redis.core.StringRedisTemplate;
+
+import java.util.concurrent.TimeUnit;
+
+/**
+ * 测试RedisTemplate
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class RedisTemplateTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(RedisTemplateTest.class);
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
+    @Test
+    public void run() {
+        final String key = "esayjava";
+        final String value = "易学Java";
+        BoundValueOperations<String, String> ops = redisTemplate.boundValueOps(key);
+
+        ops.set(value);
+        // 1分钟过期
+        ops.expire(1, TimeUnit.MINUTES);
+
+        String v = ops.get();
+        LOG.info("v: {}", v);
+    }
+
+}
+```
+
+测试代码见：
+
+* `tk.fishfish.easyjava.redis.RedisTemplateTest`：测试RedisTemplate
+
+接下来，你需要学习如何配置`RedisTemplate`序列化，集成`cache`等高级功能。
+
+### BigKey删除
+
+`redis4.0`以前，删除`bigkey`会导致阻塞（redis单线程模型）。
+
+因此，`string`类型控制在10KB以内，`hash`、`list`、`set`、`zset`元素个数不要超过5000，拒绝bigKey。
+
+提示：redis 4.0已经支持key的异步删除，欢迎使用
+
+#### Hash删除: hscan + hdel
+
+```java
+public void delBigHash(String host, int port, String password, String bigHashKey) {
+    Jedis jedis = new Jedis(host, port);
+    if (password != null && !"".equals(password)) {
+        jedis.auth(password);
+    }
+    ScanParams scanParams = new ScanParams().count(100);
+    String cursor = "0";
+    do {
+        ScanResult<Entry<String, String>> scanResult = jedis.hscan(bigHashKey, cursor, scanParams);
+        List<Entry<String, String>> entryList = scanResult.getResult();
+        if (entryList != null && !entryList.isEmpty()) {
+            for (Entry<String, String> entry : entryList) {
+                jedis.hdel(bigHashKey, entry.getKey());
+            }
+        }
+        cursor = scanResult.getStringCursor();
+    } while (!"0".equals(cursor));
+    //删除bigkey
+    jedis.del(bigHashKey);
+}
+```
+
+#### List删除: ltrim
+
+```java
+public void delBigList(String host, int port, String password, String bigListKey) {
+    Jedis jedis = new Jedis(host, port);
+    if (password != null && !"".equals(password)) {
+        jedis.auth(password);
+    }
+    long llen = jedis.llen(bigListKey);
+    int counter = 0;
+    int left = 100;
+    while (counter < llen) {
+        //每次从左侧截掉100个
+        jedis.ltrim(bigListKey, left, llen);
+        counter += left;
+    }
+    //最终删除key
+    jedis.del(bigListKey);
+}
+````
+
+#### Set删除: sscan + srem
+
+```java
+public void delBigSet(String host, int port, String password, String bigSetKey) {
+    Jedis jedis = new Jedis(host, port);
+    if (password != null && !"".equals(password)) {
+        jedis.auth(password);
+    }
+    ScanParams scanParams = new ScanParams().count(100);
+    String cursor = "0";
+    do {
+        ScanResult<String> scanResult = jedis.sscan(bigSetKey, cursor, scanParams);
+        List<String> memberList = scanResult.getResult();
+        if (memberList != null && !memberList.isEmpty()) {
+            for (String member : memberList) {
+                jedis.srem(bigSetKey, member);
+            }
+        }
+        cursor = scanResult.getStringCursor();
+    } while (!"0".equals(cursor));
+    //删除bigkey
+    jedis.del(bigSetKey);
+}
+```
+
+#### SortedSet删除: zscan + zrem
+
+```java
+public void delBigZset(String host, int port, String password, String bigZsetKey) {
+    Jedis jedis = new Jedis(host, port);
+    if (password != null && !"".equals(password)) {
+        jedis.auth(password);
+    }
+    ScanParams scanParams = new ScanParams().count(100);
+    String cursor = "0";
+    do {
+        ScanResult<Tuple> scanResult = jedis.zscan(bigZsetKey, cursor, scanParams);
+        List<Tuple> tupleList = scanResult.getResult();
+        if (tupleList != null && !tupleList.isEmpty()) {
+            for (Tuple tuple : tupleList) {
+                jedis.zrem(bigZsetKey, tuple.getElement());
+            }
+        }
+        cursor = scanResult.getStringCursor();
+    } while (!"0".equals(cursor));
+    //删除bigkey
+    jedis.del(bigZsetKey);
+}
+```
+
+建议阅读：
+
+* [阿里云Redis开发规范](http://blog.didispace.com/%E9%98%BF%E9%87%8C%E4%BA%91Redis%E5%BC%80%E5%8F%91%E8%A7%84%E8%8C%83/)
+
+### 原子性
+
+先看一段代码：
+
+```java
+public boolean tryAcquire() {
+    Jedis jedis = null;
+    try {
+        jedis = pool.getResource();
+        // 获取当前剩余的凭据数
+        Long current = Long.valueOf(jedis.get(key));
+        if (current > 0) {
+            // 凭据数大于0，则获取成功，减一
+            jedis.incr(key);
+            return true;
+        }
+        return false;
+    } catch (JedisException e) {
+        LOG.error("tryAcquire error", e);
+        return false;
+    } finally {
+        returnResource(jedis);
+    }
+}
+```
+
+上面的例子是获取`redis`凭据，如果凭据数大于0，则获取成功，减一；否则获取失败。
+
+感觉是没问题的，但是稍微接触过多线程，就会发现，`get(key)`、`incr(key)`这两个操作组成的代码块不是原子性。
+
+为了保证这个操作是原子性，我们可以用`lua`脚本将`get`、`incr`命令封装成原子性。
+
+```java
+/**
+ * 基于redis lua实现Semaphore
+ *
+ * @author xuan
+ * @since 1.0.0
+ */
+public class RedisSemaphore implements Semaphore {
+
+    private static final Logger LOG = LoggerFactory.getLogger(Semaphore.class);
+
+    /**
+     * redis默认存储的key
+     */
+    private static final String DEFAULT_KEY = "rateLimit:semaphore";
+
+    /**
+     * lua执行脚本，如果大于0，则减一，返回1，代表获取成功
+     */
+    private static final String SCRIPT_LIMIT =
+            "local key = KEYS[1] " +
+            "local current = tonumber(redis.call('get', key)) " +
+            "local res = 0 " +
+            "if current > 0 then " +
+            "   redis.call('decr', key) " +
+            "   res = 1 " +
+            "end " +
+            "return res ";
+
+    /**
+     * Redis连接池
+     */
+    private final Pool<Jedis> pool;
+
+    /**
+     * redis存储的key
+     */
+    private final String key;
+
+    /**
+     * 凭据限制的数目
+     */
+    private final Long limits;
+
+    public RedisSemaphore(Pool<Jedis> pool, Long limits) {
+        this(pool, DEFAULT_KEY, limits);
+    }
+
+    public RedisSemaphore(Pool<Jedis> pool, String key, Long limits) {
+        this.pool = pool;
+        this.key = key;
+        this.limits = limits;
+        setup();
+    }
+
+    /**
+     * 尝试获取凭据，获取不到凭据不等待，直接返回
+     *
+     * @return 获取到凭据返回true，否则返回false
+     */
+    @Override
+    public boolean tryAcquire() {
+        Jedis jedis = null;
+        try {
+            jedis = pool.getResource();
+            Long res = (Long) jedis.eval(SCRIPT_LIMIT, Collections.singletonList(key), Collections.<String>emptyList());
+            return res > 0;
+        } catch (JedisException e) {
+            LOG.error("tryAcquire error", e);
+            return false;
+        } finally {
+            returnResource(jedis);
+        }
+    }
+
+    /**
+     * 释放获取到的凭据
+     */
+    @Override
+    public void release() {
+        Jedis jedis = null;
+        try {
+            jedis = pool.getResource();
+            jedis.incr(key);
+        } catch (JedisException e) {
+            LOG.error("release error", e);
+        } finally {
+            returnResource(jedis);
+        }
+    }
+
+    private void setup() {
+        Jedis jedis = null;
+        try {
+            jedis = pool.getResource();
+            jedis.del(key);
+            jedis.incrBy(key, limits);
+        } finally {
+            returnResource(jedis);
+        }
+    }
+
+    private void returnResource(Jedis jedis) {
+        if (jedis != null) {
+            jedis.close();
+        }
+    }
+
+}
+```
+
+建议搜索下`lua`脚本的相关知识，比如`jedis`怎么使用、`spring`中怎么使用等等。
+
+### 分布式锁
+
+分布式锁实现方案比较多：
+
+* `Redis`分布式锁
+* `Zookeeper`分布式锁
+
+建议大家搜索相关资料学习下原理。
+
+推荐使用`redisson`封装的[分布式锁](https://github.com/redisson/redisson/wiki/8.-%E5%88%86%E5%B8%83%E5%BC%8F%E9%94%81%E5%92%8C%E5%90%8C%E6%AD%A5%E5%99%A8)。
+
+### 限流
+
+* `Guava`中令牌桶实现
+* `Redis`实现
+
+建议大家搜索相关资料学习下原理。
+
+推荐使用`redisson`封装的[限流器](https://github.com/redisson/redisson/wiki/6.-%E5%88%86%E5%B8%83%E5%BC%8F%E5%AF%B9%E8%B1%A1#612-%E9%99%90%E6%B5%81%E5%99%A8ratelimiter)
+
+### 看我
+
+如果你在寻求通过redis实现某些功能（比如布隆过滤器、阻塞队列等），一定要看看`redisson`，也许你忙活了半天要实现的功能，人家已经实现了呢？（关键是实现的更健壮哟）。
+
+[redisson中文文档](https://github.com/redisson/redisson/wiki/%E7%9B%AE%E5%BD%95)
 
 ## Excel导入导出
 

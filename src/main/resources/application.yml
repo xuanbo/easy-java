@@ -29,6 +29,18 @@ spring:
     show-sql: true
     hibernate:
       ddl-auto: update
+  redis:
+    database: 1
+    host: 127.0.0.1
+    port: 6379
+    password:
+    timeout: 3000
+    lettuce:
+      port:
+        max-active: 16
+        max-idle: 8
+        min-idle: 4
+        max-wait: 50ms
 
 # 任务线程池
 task:
