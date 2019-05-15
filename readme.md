@@ -15,6 +15,7 @@
 * [日志](#日志)
 * [测试](#测试)
 * [数据库连接池](#数据库连接池)
+* [ORM](#ORM)
 * [Excel导入导出](#Excel导入导出)
 * [Kafka](#Kafka)
 * [Hive](#Hive)
@@ -1466,6 +1467,37 @@ spring:
 建议阅读：
 
 * [boot-features-jpa-and-spring-data](https://docs.spring.io/spring-boot/docs/2.0.0.RELEASE/reference/htmlsingle/#boot-features-jpa-and-spring-data)
+
+## ORM
+
+关于ORM，目前使用比较多的有：
+
+* `spring-boot-starter-data-jpa`
+* `Hibernate`
+* `Mybatis`
+* `spring-data-starter-jdbc`
+* 原生`JDBC`
+
+其中，封装程度、面向对象由深至浅。
+
+但是现在已经是2019年了，`Hibernate`使用已经很少了，虽然`spring-boot-starter-data-jpa`底层使用了`Hibernate`，但是不建议直接使用`Hibernate`，使用更上层的`spring-boot-starter-data-jpa`比较好，**文档多**，更新快。
+原生`JDBC`编程也比较少了，建议使用上层一点的`spring-data-starter-jdbc`。
+
+因此，对于业务单一、简单，没有太多的复杂关联，推荐使用`spring-boot-starter-data-jpa`。
+对于业务复杂，有比较多的业务关联，推荐使用`Mybatis`，然后配合一些插件来使用。
+
+### Mybatis
+
+关于`Mybatis`的文档也比较多，这里推荐几个好用插件：
+
+* [PageHelper](https://github.com/pagehelper/Mybatis-PageHelper)
+* [Mapper](https://github.com/abel533/Mapper)
+* [mybatis-plus](https://github.com/baomidou/mybatis-plus)
+
+其中`PageHelper`、`Mappe`插件一般配合使用，分别用于分页、通过Mapper。
+`mybatis-plus`包含上述2个插件的功能，还有其他附加功能。
+
+大家灵活选择合适的插件即可。
 
 ## Excel导入导出
 
