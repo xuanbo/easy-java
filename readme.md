@@ -12,6 +12,7 @@
 * [maven](#maven)
 * [线程池](#线程池)
 * [spring-boot](#spring-boot)
+* [注解](#注解)
 * [日志](#日志)
 * [测试](#测试)
 * [数据库连接池](#数据库连接池)
@@ -1195,6 +1196,371 @@ public class DemoController {
 * [spring-boot-guider
 ](https://github.com/xuanbo/spring-boot-guider)，这个是我总结的spring-boot(基于1.5.10.RELEAS)入门，适合学习mybatis、reids、mongodb集成
 
+## 注解
+
+在`spring-boot`中有一句话，没有什么是一个注解搞不定的。如果有，那么再加一个。
+
+本次内容参考自[关于注解我们需要知道的](https://juejin.im/post/5cda5a3ae51d456e51614b94)，建议阅读一番。
+
+### JDK注解
+
+从`JDK5`开始增加了对注解的支持，注解可以在编译，类加载和运行时被读取，并执行相应一些定义好的处理。通过注解可以在不改变原有代码和逻辑的情况下进行一些其他的补充操作。
+
+#### 元注解
+
+在java中系统为我们预置了一部分注解，我们可以通过这些注解来定义其他注解的作用和有效范围等特性。
+
+##### @Target
+
+@Target用于说明`Annotation`所修饰的对象范围，所能修饰的范围都被定义在枚举类`ElementType`中。
+
+```java
+public enum ElementType {
+    // 表示可以用于类，接口，注解或者枚举定义中
+    TYPE,
+    // 字段
+    FIELD,
+    // 方法(不包括构造方法)
+    METHOD,
+    // 方法的参数
+    PARAMETER,
+    // 构造方法上
+    CONSTRUCTOR,
+    // 局部变量
+    LOCAL_VARIABLE,
+    // 只能用在注解上
+    ANNOTATION_TYPE,
+    // 作用包上 package-info.java
+    PACKAGE,
+    // 表示注解能写在类型变量(泛型参数)的声明语句中如 List<Integer> list = new @Save ArrayList<>();
+    TYPE_PARAMETER,
+    // 表示注解能写在使用类型的任何语句中（声明语句、泛型和强制转换语句中的类型
+    TYPE_USE
+}
+```
+
+##### @Retention
+
+`Retention`定义了该`Annotation`被保留的时间长短：表示需要在什么级别保存注解信息，用于描述注解的生命周期（即被描述的注解在什么范围内有效），取值被定义在枚举类`RetentionPolicy`中：
+
+```java
+public enum RetentionPolicy {
+    // 表示在源代码时有效，编译后的文件没有该注解，一般该类注解仅用于标识如@SuppressWarnings
+    SOURCE,
+
+    // 默认行为 自定义注解如果没有显示的声明则默认为该行为 在编译时不会被抛弃，但是会被虚拟机抛弃
+    CLASS,
+
+    // 保留到运行时，可以通过反射来获取 一般该类注解会影响系统的运行
+    RUNTIME
+}
+```
+
+##### @Documented
+
+```java
+@Documented
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.ANNOTATION_TYPE)
+public @interface Documented {
+}
+```
+
+从注解定义可以看到该注解用在注解定义上。
+
+`@Documented`用于描述其它类型的`Annotation`应该被作为被标注的程序成员的公共API，因此可以被如`javadoc`之类的工具文档化。但是实际使用并不多，有其他更好的替代。
+
+##### @Inherited
+
+`@Inherited`是一个标记注解，`@Inherited`表示被其标注的类型是被继承的。如果一个使用了`@Inherited`修饰的`Annotation`类型被用于一个`class`，则这个`Annotation`将被用于该`class`的子类。
+
+问题：那么注解作用于方法上，子类重写该方法，能获取到吗？
+
+#### 标准注解
+
+上面介绍的几种元注解是在我们进行自定义注解的时候会用到的，而下面我们介绍几种平时业务开发会经常使用的注解。
+
+##### @Deprecated
+
+`@Deprecated`用来描述在当前系统中已经被废弃不推荐使用的类或方法等。
+
+```java
+@Target(value={CONSTRUCTOR, FIELD, LOCAL_VARIABLE, METHOD, PACKAGE, PARAMETER, TYPE})
+```
+
+如果我们使用了被`@Deprecated`标注的类或方法等，在进行编译的时候会显示相应的提示信息。
+
+##### @Override
+
+`@Override`是我们使用很频繁的一个注解，由于重写的操作仅存在于方法中，所以`@Override`也只能对方法进行标注。
+
+`@Override`功能主要是用来校验当前被标注的方法是否为重写方法，平时我们在继承抽象类或实现接口时都应使用该注解来标注被重写的方法。
+
+##### @SuppressWarnings
+
+`@SuppressWarnings`用于可选择的抑制编译器在编译时产生警告信息。
+
+```java
+@Target({TYPE, FIELD, METHOD, PARAMETER, CONSTRUCTOR, LOCAL_VARIABLE})
+```
+
+`@SuppressWarnings`可选择的值有很多：
+
+* `deprecation`：不产生使用过期方法(...)的警告，@SuppressWarnings("deprecation")
+* `unchecked`：执行了未检查的转换的警告
+* `finally`：finally语句无法正常完成时的警告
+* ...
+* `all`：任意类型的警告
+
+### 自定义注解
+
+自定义一个注解及其简单，使用`@interface`关键字即可完成。同时我们需要确定我们定义的注解使用范围和其具体用途，根据此来确定使用元注解的哪些参数来修饰我们定义的注解。
+
+这里我们定义一个`@Log`注解用于记录方法调用日志。
+
+```java
+package tk.fishfish.easyjava.annotation;
+
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+/**
+ * 自定义日志注解，用于记录方法调用时日志
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+@Documented
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD})
+public @interface Log {
+
+    /**
+     * 模块名称
+     *
+     * @return 模块名称
+     */
+    String module();
+
+    /**
+     * 功能名称
+     *
+     * @return 功能名称
+     */
+    String function();
+
+    /**
+     * 描述
+     *
+     * @return 描述
+     */
+    String description();
+
+}
+```
+
+使用注解：
+
+```java
+package tk.fishfish.easyjava.annotation;
+
+/**
+ * 没有卵用的service实现
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class SomeServiceImpl implements SomeService {
+
+    @Override
+    // 使用我们定义的注解
+    @Log(module = "some", function = "find", description = "根据id查询")
+    public Some findById(Long id) {
+        // 模拟一些操作
+        if (id % 2 == 0) {
+            return null;
+        }
+        return new Some(id, "随机");
+    }
+}
+```
+
+测试一下：
+
+```java
+package tk.fishfish.easyjava.annotation;
+
+import org.junit.Before;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * 测试
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class SomeServiceTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(SomeServiceTest.class);
+
+    private SomeService someService;
+
+    @Before
+    public void setup() {
+        someService = new SomeServiceImpl();
+    }
+
+    @Test
+    public void findById() {
+        Some some = someService.findById(1L);
+        LOG.info("some: {}", some);
+    }
+
+}
+```
+
+运行该测试用例会发现，并没有什么卵用。因为，还没有自定义解析规则。
+
+```text
+16:28:43.366 [main] INFO tk.fishfish.easyjava.annotation.SomeServiceTest - some: Some{id=1, name='随机'}
+```
+
+测试代码见：
+
+* `tk.fishfish.easyjava.annotation.Log`：自定义注解
+* `tk.fishfish.easyjava.annotation.Some`：javabean
+* `tk.fishfish.easyjava.annotation.SomeService`：服务接口
+* `tk.fishfish.easyjava.annotation.SomeServiceImpl`：服务实现
+* `tk.fishfish.easyjava.annotation.SomeServiceTest`：测试用例
+
+### 自定义注解解析
+
+JDK提供`InvocationHandler`和`Proxy`，用于动态代理。基于此，我们拦截到方法，判断注解，然后进行逻辑处理。
+
+```java
+package tk.fishfish.easyjava.annotation;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+
+/**
+ * Log代理
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class LogProxy implements InvocationHandler {
+
+    private static final Logger LOG = LoggerFactory.getLogger(LogProxy.class);
+
+    /**
+     * 被代理的类
+     */
+    private Object target;
+
+    @SuppressWarnings("unchecked")
+    public <T> T bind(T target) {
+        this.target = target;
+        return (T) Proxy.newProxyInstance(target.getClass().getClassLoader(),
+                target.getClass().getInterfaces(), this);
+    }
+
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        // 这一步获取实际类的方法，因为method是接口的方法时，是获取不到实现类上的注解信息的
+        Method realMethod = getRealMethod(method);
+        // 查找方法上是否存在该注解
+        Log log = realMethod.getDeclaredAnnotation(Log.class);
+        if (log == null) {
+            LOG.debug("方法: {} 无@Log注解", method);
+        } else {
+            String module = log.module();
+            String function = log.function();
+            String description = log.description();
+            // 这里我们可以保存到数据库，或者怎么样
+            LOG.info("module: {}, function: {}, description: {}", module, function, description);
+        }
+        // 反射运行方法，返回运行结果
+        return method.invoke(target, args);
+    }
+
+    private Method getRealMethod(Method method) throws NoSuchMethodException {
+        return target.getClass().getMethod(method.getName(), method.getParameterTypes());
+    }
+}
+```
+
+其中`getRealMethod`方法用于获取实际类的方法，因为`invoke`传入的`method`对象是接口的方法，接口上是没有`@Log`注解的。
+
+测试：
+
+```java
+package tk.fishfish.easyjava.annotation;
+
+import org.junit.Before;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * 测试
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class SomeServiceTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(SomeServiceTest.class);
+
+    private SomeService someService;
+    private SomeService proxySomeService;
+
+    @Before
+    public void setup() {
+        someService = new SomeServiceImpl();
+        // 代理
+        proxySomeService = new LogProxy().bind(someService);
+    }
+
+    @Test
+    public void findById() {
+        Some some = someService.findById(1L);
+        LOG.info("some: {}", some);
+    }
+
+    @Test
+    public void findByIdProxy() {
+        Some some = proxySomeService.findById(1L);
+        LOG.info("some: {}", some);
+    }
+
+}
+```
+
+运行`findByIdProxy`测试方法即可看到打印注解上获取的信息：
+
+```text
+17:38:23.359 [main] INFO tk.fishfish.easyjava.annotation.LogProxy - module: some, function: find, description: 根据id查询
+17:38:23.363 [main] INFO tk.fishfish.easyjava.annotation.SomeServiceTest - some: Some{id=1, name='随机'}
+```
+
+通过这个例子，大家应该可以了解到JDK动态代理是需要定义接口的。
+
+其实还有一种是基于子类字节码实现的方案——`cglib`，使用起来比较复杂，我们一般使用`spring aop`简化动态代理。
+
+### spring aop
+
+待续
+
 ## 日志
 
 我们应该**依赖日志接口，而不是具体的日志实现**。这样方便后期更换其他实现，而不需要改代码，虽然我们一般不会更改其他实现。哈哈！
@@ -1628,7 +1994,7 @@ public class HikariTest {
 
 * `tk.fishfish.easyjava.datasource.HikariTest`：Hikari测试
 
-### spring-boot
+### spring-boot与HikariCP
 
 其实从`spring-boot-2.0`开始，`HikariCP`就已经作为默认的数据库连接池了。
 
