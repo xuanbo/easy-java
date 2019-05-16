@@ -15,6 +15,7 @@
 * [日志](#日志)
 * [测试](#测试)
 * [数据库连接池](#数据库连接池)
+* [Future模式](#Future模式)
 * [ORM](#ORM)
 * [Redis](#Redis)
 * [Excel导入导出](#Excel导入导出)
@@ -817,6 +818,313 @@ async:
 * `tk.fishfish.easyjava.async`：该包下为async测试相关
 
 完整探究过程，看我整理的[Spring Boot使用@Async](http://www.fishfish.tk/article/5)即可。
+
+## Future模式
+
+> 以下内容搬运自[【并发编程】Future模式添加Callback及Promise 模式
+](https://juejin.im/post/5cdcb5f16fb9a031f90d7892)。
+
+`Future`是Java5增加的类，它用来描述一个异步计算的结果。
+你可以使用`isDone`方法检查计算是否完成，或者使用`get`方法阻塞住调用线程，直到计算完成返回结果。你也可以使用`cancel`方法停止任务的执行。
+
+下面来一个栗子：
+
+```java
+package tk.fishfish.easyjava.threadpool;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+/**
+ * JDK Future
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class FutureTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(FutureTest.class);
+
+    @Test
+    public void run() {
+        ExecutorService threadPool = Executors.newFixedThreadPool(1);
+        Future<Integer> future = threadPool.submit(() -> {
+            Thread.sleep(10000);
+            // 结果
+            return 100;
+        });
+
+        // do something
+
+        try {
+            // main阻塞等待结果
+            Integer result = future.get();
+            LOG.info("result: {}", result);
+        } catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+            LOG.warn("获取结果异常", e);
+        }
+    }
+
+}
+```
+
+在这个例子中，我们往线程池中提交了一个任务并立即返回了一个`Future`对象，接着可以做一些其他操作，最后利用它的`get`方法阻塞等待结果或`isDone`方法轮询等待结果。
+
+虽然这些方法提供了异步执行任务的能力，但是对于结果的获取却还是很不方便，只能通过阻塞或者轮询的方式得到任务的结果。
+
+阻塞的方式显然和我们的异步编程的初衷相违背，轮询的方式又会耗费无谓的CPU资源，而且也不能及时的得到计算结果，为什么不能用观察者设计模式当计算结果完成及时通知监听者呢？
+
+很多语言，比如`Node.js`，采用`Callback`的方式实现异步编程。`Java`的一些框架，比如`Netty`，自己扩展了`Java`的`Future`接口，提供了`addListener`等多个扩展方法。`Google`的`guava`也提供了通用的扩展`Future`：`ListenableFuture`、 `SettableFuture`以及辅助类`Futures`等，方便异步编程。为此，`Java`终于在`JDK1.8`这个版本中增加了一个能力更强的`Future`类：`CompletableFuture`。它提供了非常强大的`Future`的扩展功能，可以帮助我们简化异步编程的复杂性，提供了函数式编程的能力，可以通过回调的方式处理计算结果。下面来看看这几种方式。
+
+### Netty-Future
+
+引入Maven依赖：
+
+```xml
+<dependency>
+    <groupId>io.netty</groupId>
+    <artifactId>netty-all</artifactId>
+    <version>4.1.29.Final</version>
+</dependency>
+```
+
+测试代码：
+
+```java
+package tk.fishfish.easyjava.threadpool;
+
+import io.netty.util.concurrent.DefaultEventExecutorGroup;
+import io.netty.util.concurrent.EventExecutorGroup;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.FutureListener;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.CountDownLatch;
+
+/**
+ * Netty-Future
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class NettyFutureTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(NettyFutureTest.class);
+
+    @Test
+    public void run() {
+        EventExecutorGroup group = new DefaultEventExecutorGroup(4);
+        LOG.info("开始");
+
+        final CountDownLatch latch = new CountDownLatch(1);
+        Future<Integer> f = group.submit(() -> {
+            LOG.info("开始耗时计算");
+            Thread.sleep(10000);
+            LOG.info("结束耗时计算");
+            return 100;
+        });
+
+        f.addListener((FutureListener<Integer>) future -> {
+            LOG.info("计算结果: {}", future.get());
+            latch.countDown();
+        });
+
+        LOG.info("结束");
+        try {
+            // 不让守护线程退出
+            latch.await();
+        } catch (InterruptedException e) {
+            LOG.warn("等待异常", e);
+        }
+    }
+
+}
+```
+
+运行结果：
+
+```text
+14:49:06.702 [main] DEBUG io.netty.util.internal.logging.InternalLoggerFactory - Using SLF4J as the default logging framework
+14:49:06.732 [main] INFO tk.fishfish.easyjava.threadpool.NettyFutureTest - 开始
+14:49:06.791 [defaultEventExecutorGroup-2-1] INFO tk.fishfish.easyjava.threadpool.NettyFutureTest - 开始耗时计算
+14:49:06.792 [main] INFO tk.fishfish.easyjava.threadpool.NettyFutureTest - 结束
+14:49:16.796 [defaultEventExecutorGroup-2-1] INFO tk.fishfish.easyjava.threadpool.NettyFutureTest - 结束耗时计算
+14:49:16.799 [defaultEventExecutorGroup-2-1] DEBUG io.netty.util.internal.InternalThreadLocalMap - -Dio.netty.threadLocalMap.stringBuilder.initialSize: 1024
+14:49:16.800 [defaultEventExecutorGroup-2-1] DEBUG io.netty.util.internal.InternalThreadLocalMap - -Dio.netty.threadLocalMap.stringBuilder.maxSize: 4096
+14:49:16.801 [defaultEventExecutorGroup-2-1] INFO tk.fishfish.easyjava.threadpool.NettyFutureTest - 计算结果: 100
+```
+
+可以发现，守护线程已经运行完了，当线程池任务执行完成后，回调获取计算是在`defaultEventExecutorGroup-2-1`线程中执行的，避免了守护线程无谓的等待。
+
+### Guava-Future
+
+首先引入guava的Maven依赖：
+
+```xml
+<dependency>
+    <groupId>com.google.guava</groupId>
+    <artifactId>guava</artifactId>
+    <version>27.1-jre</version>
+</dependency>
+```
+
+测试代码：
+
+```java
+package tk.fishfish.easyjava.threadpool;
+
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+/**
+ * Guava Future
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class GuavaFutureTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(GuavaFutureTest.class);
+
+    @Test
+    public void run() {
+        LOG.info("开始");
+
+        ExecutorService executorService = Executors.newFixedThreadPool(10);
+        ListeningExecutorService service = MoreExecutors.listeningDecorator(executorService);
+
+        final CountDownLatch latch = new CountDownLatch(1);
+        ListenableFuture<Integer> future = service.submit(() -> {
+            LOG.info("开始耗时计算");
+            Thread.sleep(10000);
+            LOG.info("结束耗时计算");
+            return 100;
+        });
+
+        Futures.addCallback(future, new FutureCallback<Integer>() {
+            @Override
+            public void onSuccess(Integer result) {
+                LOG.info("成功，计算结果: {}", result);
+                latch.countDown();
+            }
+
+            @Override
+            public void onFailure(Throwable throwable) {
+                LOG.warn("失败", throwable);
+                latch.countDown();
+            }
+        }, executorService);
+
+        LOG.info("结束");
+        try {
+            // 不让守护线程退出
+            latch.await();
+        } catch (InterruptedException e) {
+            LOG.warn("等待异常", e);
+        }
+    }
+
+}
+```
+
+运行结果：
+
+```text
+15:16:48.703 [main] INFO tk.fishfish.easyjava.threadpool.GuavaFutureTest - 开始
+15:16:48.767 [pool-1-thread-1] INFO tk.fishfish.easyjava.threadpool.GuavaFutureTest - 开始耗时计算
+15:16:48.773 [main] INFO tk.fishfish.easyjava.threadpool.GuavaFutureTest - 结束
+15:16:58.771 [pool-1-thread-1] INFO tk.fishfish.easyjava.threadpool.GuavaFutureTest - 结束耗时计算
+15:16:58.775 [pool-1-thread-2] INFO tk.fishfish.easyjava.threadpool.GuavaFutureTest - 成功，计算结果: 100
+```
+
+跟`Netty`类似，回调计算获取结果是在`pool-1-thread-2`线程，避免了守护线程无谓的等待。
+
+### CompletableFuture
+
+前面提到了`Netty`和`Guava`的扩展都提供了`addListener`这样的接口，用于处理`Callback`调用，但其实`JDK8`已经提供了一种更为高级的回调方式：`CompletableFuture`。
+
+测试代码：
+
+```java
+package tk.fishfish.easyjava.threadpool;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+
+/**
+ * CompletableFuture
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class CompletableFutureTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(CompletableFutureTest.class);
+
+    @Test
+    public void run() {
+        LOG.info("开始");
+        final CountDownLatch latch = new CountDownLatch(1);
+        CompletableFuture<Integer> completableFuture = CompletableFuture.supplyAsync(() -> {
+            LOG.info("开始耗时计算");
+            try {
+                Thread.sleep(10000);
+            } catch (InterruptedException e) {
+                LOG.warn("执行异常", e);
+            }
+            LOG.info("结束耗时计算");
+            return 100;
+        });
+
+        completableFuture.whenComplete((result, e) -> {
+            LOG.info("回调结果: {}", result);
+            latch.countDown();
+        });
+
+        LOG.info("结束");
+        try {
+            // 不让守护线程退出
+            latch.await();
+        } catch (InterruptedException e) {
+            LOG.warn("等待异常", e);
+        }
+    }
+}
+```
+
+运行结果：
+
+```text
+15:25:01.980 [main] INFO tk.fishfish.easyjava.threadpool.GuavaFutureTest - 开始
+15:25:02.037 [ForkJoinPool.commonPool-worker-9] INFO tk.fishfish.easyjava.threadpool.GuavaFutureTest - 开始耗时计算
+15:25:02.038 [main] INFO tk.fishfish.easyjava.threadpool.GuavaFutureTest - 结束
+15:25:12.041 [ForkJoinPool.commonPool-worker-9] INFO tk.fishfish.easyjava.threadpool.GuavaFutureTest - 结束耗时计算
+15:25:12.041 [ForkJoinPool.commonPool-worker-9] INFO tk.fishfish.easyjava.threadpool.GuavaFutureTest - 回调结果: 100
+```
+
+跟`Netty`和`Guava`类似，回调计算获取结果是在`ForkJoinPool.commonPool-worker-9`线程，避免了守护线程无谓的等待。
 
 ## spring-boot
 
