@@ -867,7 +867,6 @@ public class FutureTest {
             Integer result = future.get();
             LOG.info("result: {}", result);
         } catch (InterruptedException | ExecutionException e) {
-            e.printStackTrace();
             LOG.warn("获取结果异常", e);
         }
     }
