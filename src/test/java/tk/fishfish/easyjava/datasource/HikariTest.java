@@ -65,27 +65,28 @@ public class HikariTest {
             }
         } catch (SQLException e) {
             LOG.error("数据库异常", e);
-        }
-        // 释放
-        if (rs != null) {
-            try {
-                rs.close();
-            } catch (SQLException e) {
-                LOG.error("数据库ResultSet关闭异常", e);
+        } finally {
+            // 释放
+            if (rs != null) {
+                try {
+                    rs.close();
+                } catch (SQLException e) {
+                    LOG.error("数据库ResultSet关闭异常", e);
+                }
             }
-        }
-        if (ps != null) {
-            try {
-                ps.close();
-            } catch (SQLException e) {
-                LOG.error("数据库PreparedStatement关闭异常", e);
+            if (ps != null) {
+                try {
+                    ps.close();
+                } catch (SQLException e) {
+                    LOG.error("数据库PreparedStatement关闭异常", e);
+                }
             }
-        }
-        if (connection != null) {
-            try {
-                connection.close();
-            } catch (SQLException e) {
-                LOG.error("数据库连接关闭异常", e);
+            if (connection != null) {
+                try {
+                    connection.close();
+                } catch (SQLException e) {
+                    LOG.error("数据库连接关闭异常", e);
+                }
             }
         }
     }
