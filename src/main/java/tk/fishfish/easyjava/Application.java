@@ -2,6 +2,7 @@ package tk.fishfish.easyjava;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.kafka.annotation.EnableKafka;
 
 /**
  * 入口
@@ -9,6 +10,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * @author 奔波儿灞
  * @since 1.0
  */
+@EnableKafka
 @SpringBootApplication
 public class Application {
 

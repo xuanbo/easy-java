@@ -41,6 +41,22 @@ spring:
         max-idle: 8
         min-idle: 4
         max-wait: 50ms
+  kafka:
+    consumer:
+      bootstrap-servers:
+        - 127.0.0.1:9092
+      group-id: myGroup
+      # 消费者是否自动提交偏移量，默认为true
+      enable-auto-commit: false
+      # 消费者在读取一个没有偏移量或者偏移量无效的情况下，从起始位置读取partition的记录，默认是latest
+      auto-offset-reset: earliest
+      # 单次调用poll方法能够返回的消息数量
+      max-poll-records: 50
+    listener:
+      # Listener AckMode
+      ack-mode: MANUAL_IMMEDIATE
+      # 并发消费者
+      concurrency: 1
 
 # 任务线程池
 task:
@@ -61,6 +77,6 @@ async:
 logging:
   level:
     # 全局日志级别
-    root: info
+    root: debug
   # 日志配置文件
   config: classpath:logback-spring.xml
