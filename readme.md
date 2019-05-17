@@ -10,6 +10,7 @@
 ## 导航
 
 * [maven](#maven)
+* [IO](#IO)
 * [线程池](#线程池)
 * [spring-boot](#spring-boot)
 * [注解](#注解)
@@ -88,6 +89,209 @@
 其中：
 
 * `-DskipTests`参数用于跳过测试。
+
+## IO
+
+IO在工作中会经常遇到，比如文件复制、读写、WEB文件上传/下载等。
+
+建议：工作中尽量使用工具类，能不写`new BufferedInputStream(new FileInputStream("file"))`就不写。
+
+### 文件复制
+
+对于文件复制，这里不介绍各种`FileUtils`、`FileCopyUtils`等。
+
+介绍JDK7中优雅的工具类`Paths`、`Files`使用：
+
+```java
+package tk.fishfish.easyjava.io;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+/**
+ * 文件复制
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class FileCopyTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(FileCopyTest.class);
+
+    @Test
+    public void copy() {
+        Path source = Paths.get("./readme.md");
+        Path target = Paths.get("./readme.md.copy");
+        try {
+            Files.copy(source, target);
+        } catch (IOException e) {
+            LOG.error("copy error", e);
+        }
+    }
+
+}
+```
+
+* `Paths`用于构造本地文件路径
+* `Files`用于操作文件
+
+所以，下次碰到文件复制相关的需求，试试JDK7标准库呗。
+
+### 文件读写
+
+还是优先推荐JDK7标准库`Files`：
+
+* 将文件读到字节数组：`Files.readAllBytes`
+* 将文件一行一行读取：`Files.readAllLines`
+* 遍历文件夹：`Files.list`
+* 递归遍历文件夹：`Files.walk`
+* 将字节数组写入文件：`Files.write`
+* 复制文件`Files.copy`
+* ...
+
+如果一些搞不定的操作，再去使用各种工具类吧。
+
+推荐使用apache commons相关包、spring工具类、guava等广泛使用的库。
+
+### 文件上传/下载
+
+这里主要介绍`spring mvc`中如何使用。
+
+#### 上传
+
+在`spring mvc`中通过`MultipartFile`去接受不了单个文件：
+
+```java
+package tk.fishfish.easyjava.controller;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+/**
+ * demo Controller
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+@RestController
+public class DemoController {
+
+    private static final Logger LOG = LoggerFactory.getLogger(DemoController.class);
+
+    @PostMapping("/upload")
+    public ResponseEntity<String> upload(@RequestPart("file") MultipartFile file) {
+        // 文件信息
+        LOG.info("file name: {}", file.getOriginalFilename());
+        LOG.info("file size: {}", file.getSize());
+        // 下面是保存在本地
+        InputStream in = null;
+        try {
+            Path target = Paths.get("./" + file.getOriginalFilename());
+            in = file.getInputStream();
+            Files.copy(in, target);
+        } catch (IOException e) {
+            LOG.error("save file error", e);
+            return ResponseEntity.ok("false");
+        } finally {
+            if (in != null) {
+                try {
+                    in.close();
+                } catch (IOException e) {
+                    LOG.warn("close inputStream error", e);
+                }
+            }
+        }
+        return ResponseEntity.ok("ok");
+    }
+
+}
+```
+
+![spring-mvc-upload](./doc/spring-mvc-upload.jpg)
+
+主要是通过`MultipartFile`拿到文件的输入流，之后再balabala。
+
+如果是多文件上传呢？其实将`MultipartFile`替换称`MultipartFile[]`即可。
+
+### 文件下载
+
+主要是将文件字节写入HTTP的响应流，然后设置响应头信息。
+但是这里不介绍常规的将文件字节写入`HttpServletResponse`的方式，而是通过`ResponseEntity<byte[]>`：
+
+```java
+package tk.fishfish.easyjava.controller;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+/**
+ * demo Controller
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+@RestController
+public class DemoController {
+
+    private static final Logger LOG = LoggerFactory.getLogger(DemoController.class);
+
+    @GetMapping("/download")
+    public ResponseEntity<?> download() {
+        Path source = Paths.get("./readme.md");
+        try {
+            String name = source.toFile().getName();
+            byte[] bytes = Files.readAllBytes(source);
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("Content-Disposition", "attachment;filename=" + name);
+            return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
+        } catch (IOException e) {
+            LOG.error("read file error", e);
+            return ResponseEntity.ok("false");
+        }
+    }
+
+}
+```
+
+![spring-mvc-download](./doc/spring-mvc-download.jpg)
+
+原理是一样的，也是设置响应头`Content-Disposition`告知浏览器下载。返回`ResponseEntity<byte[]>`时，底层还是将文件字节写入`HttpServletResponse`的。
+
+这种方式呢，写起来没有直接面向原生的`servlet`，完全使用`spring mvc`的东西。
+
+建议：在下载较大的文件时，还是推荐使用常规的`HttpServletResponse`方式操作。
 
 ## 线程池
 
