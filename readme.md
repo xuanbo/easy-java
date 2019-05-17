@@ -315,7 +315,7 @@ import java.io.IOException;
  */
 public class ClassPathTest {
 
-    private static final Logger LOG = LoggerFactory.getLogger(FileCopyTest.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ClassPathTest.class);
 
     @Test
     public void run() throws IOException {
