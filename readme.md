@@ -165,7 +165,7 @@ public class FileCopyTest {
 
 #### 上传
 
-在`spring mvc`中通过`MultipartFile`去接受不了单个文件：
+在`spring mvc`中通过`MultipartFile`去接收单个文件：
 
 ```java
 package tk.fishfish.easyjava.controller;
@@ -292,6 +292,51 @@ public class DemoController {
 这种方式呢，写起来没有直接面向原生的`servlet`，完全使用`spring mvc`的东西。
 
 建议：在下载较大的文件时，还是推荐使用常规的`HttpServletResponse`方式操作。
+
+### classpath
+
+经常会遇到读取classpath下的某个文件，这时推荐使用`spring`工具类`ClassPathResource`：
+
+```java
+package tk.fishfish.easyjava.io;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.io.ClassPathResource;
+
+import java.io.IOException;
+
+/**
+ * classpath
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class ClassPathTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(FileCopyTest.class);
+
+    @Test
+    public void run() throws IOException {
+        // maven项目src/main/java、src/test/java、src/main/resources
+        ClassPathResource classPathResource = new ClassPathResource("tk/fishfish/easyjava/io/ClassPathTest.class");
+        String path = classPathResource.getFile().getPath();
+        LOG.info("path: {}", path);
+    }
+
+}
+```
+
+对于maven项目，如果是运行`test cases`，那么如下路径为`classpath`：
+
+* `src/test/java`
+* `src/test/resources`
+
+如果是运行程序：
+
+* `src/main/java`
+* `src/main/resources`
 
 ## 线程池
 
