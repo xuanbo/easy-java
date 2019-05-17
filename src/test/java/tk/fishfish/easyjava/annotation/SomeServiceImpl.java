@@ -1,11 +1,14 @@
 package tk.fishfish.easyjava.annotation;
 
+import org.springframework.stereotype.Service;
+
 /**
  * 没有卵用的service实现
  *
  * @author 奔波儿灞
  * @since 1.0
  */
+@Service
 public class SomeServiceImpl implements SomeService {
 
     @Override

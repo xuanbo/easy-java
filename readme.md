@@ -1559,7 +1559,108 @@ public class SomeServiceTest {
 
 ### spring aop
 
-待续
+建议阅读下[官方文档](https://docs.spring.io/spring/docs/5.1.6.RELEASE/spring-framework-reference/core.html#aop-ataspectj)，网上各种博客参差不齐，容易进坑。
+
+经过阅读一番，大概知道一些相关的注解：
+
+* `@Aspect`：申明切面类
+* `@Pointcut`：切面表达式（execution、@annotation等）
+* `@Before`：前置通知
+* `@After`：后置通知
+* ...
+
+在`spring-boot`中，只需要依赖：
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-aop</artifactId>
+    <version>${spring.boot.version}</version>
+</dependency>
+```
+
+还是上面的`@Log`注解，类似JDK实现的`LogProxy`，我们通过AOP的编程方式去解析：
+
+```java
+package tk.fishfish.easyjava.annotation;
+
+import org.aspectj.lang.JoinPoint;
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Before;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
+/**
+ * `@Log`切面
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+@Aspect
+@Component
+public class LogAspect {
+
+    private static final Logger LOG = LoggerFactory.getLogger(LogAspect.class);
+
+    @Before(value = "@annotation(log)", argNames = "log")
+    public void before(JoinPoint joinPoint, Log log) {
+        String module = log.module();
+        String function = log.function();
+        String description = log.description();
+        // 这里我们可以保存到数据库，或者怎么样
+        LOG.info("module: {}, function: {}, description: {}", module, function, description);
+    }
+
+}
+```
+
+通过`@Before`前置通知，在方法调用前记录日志。
+
+测试代码：
+
+```java
+package tk.fishfish.easyjava.annotation;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.junit4.SpringRunner;
+
+/**
+ * AOP测试
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+@SpringBootTest
+@RunWith(SpringRunner.class)
+public class SomeServiceAopTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(SomeServiceAopTest.class);
+
+    @Autowired
+    private SomeService someService;
+
+    @Test
+    public void findById() {
+        Some some = someService.findById(1L);
+        LOG.info("some: {}", some);
+    }
+
+}
+```
+
+注意：上面的`SomeServiceImpl`需要增加`@Service`注解。
+
+完整的测试代码见：
+
+* `tk.fishfish.easyjava.annotation`：该包为AOP相关的测试代码
+
+写在最后，对于AOP的其他骚操作，这里不做过多介绍。建议阅读[官方文档](https://docs.spring.io/spring/docs/5.1.6.RELEASE/spring-framework-reference/core.html#aop)，参考官方例子，然后本地亲自试一试。
 
 ## 日志
 
