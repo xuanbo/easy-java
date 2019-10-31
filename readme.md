@@ -3097,6 +3097,142 @@ public class RedisSemaphore implements Semaphore {
 
 关于`easyexcel`的使用，这里就不做介绍，直接看官方文档即可。
 
+###类型转换
+
+`easyexcel`通过`com.alibaba.excel.converters.DefaultConverterLoader`注册一些默认的类型转化 
+
+![easyexcel-converter-default](./doc/easyexcel-converter-default.jpg)
+
+当有个字段类型为`java.sql.Timestamp`时，是无法正常转换的，会报错（`com.alibaba.excel.exception.ExcelDataConvertException: Can not find 'Converter' support class Timestamp.`）。
+
+此时，我们需要自定义类型转换。
+
+```java
+package tk.fishfish.easyjava.excel;
+
+import com.alibaba.excel.converters.Converter;
+import com.alibaba.excel.enums.CellDataTypeEnum;
+import com.alibaba.excel.metadata.CellData;
+import com.alibaba.excel.metadata.GlobalConfiguration;
+import com.alibaba.excel.metadata.property.ExcelContentProperty;
+import com.alibaba.excel.util.DateUtils;
+
+import java.sql.Timestamp;
+import java.util.Date;
+
+/**
+ * Timestamp转换
+ *
+ * @author 奔波儿灞
+ * @see com.alibaba.excel.converters.date.DateStringConverter
+ * @since 1.0
+ */
+public class TimestampConverter implements Converter<Timestamp> {
+
+    @Override
+    public Class supportJavaTypeKey() {
+        return Timestamp.class;
+    }
+
+    @Override
+    public CellDataTypeEnum supportExcelTypeKey() {
+        return CellDataTypeEnum.STRING;
+    }
+
+    @Override
+    public Timestamp convertToJavaData(CellData cellData, ExcelContentProperty contentProperty,
+                                       GlobalConfiguration configuration) throws Exception {
+        if (contentProperty == null || contentProperty.getDateTimeFormatProperty() == null) {
+            Date date = DateUtils.parseDate(cellData.getStringValue(), null);
+            return new Timestamp(date.getTime());
+        } else {
+            Date date = DateUtils.parseDate(cellData.getStringValue(), contentProperty.getDateTimeFormatProperty().getFormat());
+            return new Timestamp(date.getTime());
+        }
+    }
+
+    @Override
+    public CellData convertToExcelData(Timestamp value, ExcelContentProperty contentProperty,
+                                       GlobalConfiguration configuration) {
+        if (contentProperty == null || contentProperty.getDateTimeFormatProperty() == null) {
+            return new CellData(DateUtils.format(value, null));
+        } else {
+            return new CellData(DateUtils.format(value, contentProperty.getDateTimeFormatProperty().getFormat()));
+        }
+    }
+
+}
+```
+
+这里参考官方的`com.alibaba.excel.converters.date.DateStringConverter`，写一个自定义的转换。
+
+接下来注册到`easyexcel`：
+
+```java
+package tk.fishfish.easyjava.excel;
+
+import com.alibaba.excel.EasyExcel;
+import org.junit.Test;
+
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+/**
+ * easyexcel测试
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class EasyExcelTest {
+
+    @Test
+    public void customConverter() {
+        List<Map<String, Object>> data = new ArrayList<>();
+        Map<String, Object> row = new HashMap<>();
+        row.put("name", "名字");
+        row.put("age", 10);
+      	// 官方无法转换Timestamp
+        row.put("time", new Timestamp(System.currentTimeMillis()));
+        row.put("date", new Date());
+        row.put("sex", 1);
+        data.add(row);
+
+        EasyExcel.write("demo.xlsx")
+                .head(head(data))
+          			// 注册自定义类型转换
+                .registerConverter(new TimestampConverter())
+                .sheet("data")
+                .doWrite(data(data));
+    }
+
+    private List<List<String>> head(List<Map<String, Object>> data) {
+        return data.stream()
+                .findFirst()
+                .map(Map::keySet)
+                .map(set -> set.stream().map(Collections::singletonList).collect(Collectors.toList()))
+                .orElseGet(Collections::emptyList);
+    }
+
+    private List<List<Object>> data(List<Map<String, Object>> data) {
+        return data.stream()
+                .map(Map::values)
+                .map(ArrayList::new)
+                .collect(Collectors.toList());
+    }
+
+}
+```
+
+### 分页
+
+参考官方的[测试代码](https://github.com/alibaba/easyexcel/blob/v2.0.5/src/test/java/com/alibaba/easyexcel/test/demo/write/WriteTest.java#L124)即可。
+
 ## Kafka
 
 可以先看下官方文档，然后运行我之前写的例子，来进行入门。
