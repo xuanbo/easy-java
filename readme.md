@@ -338,6 +338,202 @@ public class ClassPathTest {
 * `src/main/java`
 * `src/main/resources`
 
+### 文件魔数
+
+我们经常会碰到判断文件类型的情况，比如，验证用户上传的文件是否为`XML`或者其他格式。然后，比较挫的实现方式是判断文件后缀。
+
+哈哈，但是，如果用户故意修改后缀名。那么，是否有办法识别呢？
+
+当时是有的！一般的，几乎所有的可执行文件格式最开始的几个字节都是魔数。为什么呢？你要处理的一段数据，最初进行一个粗略判断。主要是怕处理了半天，原来输入是段垃圾，浪费自己时间，甚至把自己程序搞奔溃。
+
+你可以认为，魔数（magic number）读到是对的，你有就有99%的信心，这个数据应该不是垃圾，值得分析。
+
+比如，`JPEG`的文件头为`FFD8FF `、`PNG`文件头为`89504E47 `。
+
+#### 魔数类型
+
+这里定义了一个枚举，列举了常见的文件类型，以及魔数。
+
+```java
+package tk.fishfish.easyjava.util;
+
+/**
+ * 根据文件魔数判断文件实际类型，防止修改后缀误判
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public enum FileType {
+
+    /**
+     * jpg、jpeg
+     */
+    JPEG("JPEG", "FFD8FF"),
+
+    /**
+     * png
+     */
+    PNG("PNG", "89504E47"),
+
+    /**
+     * xml
+     */
+    XML("XML", "3C3F786D6C"),
+
+    /**
+     * html
+     */
+    HTML("HTML", "68746D6C3E"),
+
+    /**
+     * pdf
+     */
+    PDF("PDF", "255044462D312E"),
+
+    /**
+     * zip、jar
+     */
+    ZIP("ZIP", "504B0304"),
+
+    /**
+     * rar
+     */
+    RAR("RAR", "52617221"),
+
+    ;
+
+    /**
+     * 文件类型
+     */
+    private String type;
+
+    /**
+     * 文件魔数
+     */
+    private String value;
+
+    FileType(String type, String value) {
+        this.type = type;
+        this.value = value;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public String getValue() {
+        return value;
+    }
+
+}
+```
+
+当然，列举不全，有兴趣自己网上搜索相关资料。
+
+#### 工具类
+
+如下是一个工具类，用来根据文件的头来判断文件类型：
+
+```java
+package tk.fishfish.easyjava.util;
+
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.util.Objects;
+
+/**
+ * 文件类型工具
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public final class FileTypeUtils {
+
+    private static final int LEN = 28;
+
+    private FileTypeUtils() {
+        throw new IllegalStateException("Utils");
+    }
+
+    public static boolean isType(BufferedInputStream is, FileType fileType) throws IOException {
+        Objects.requireNonNull(fileType);
+
+        String header = getFileHeader(is);
+        return header.startsWith(fileType.getValue());
+    }
+
+    private static String getFileHeader(BufferedInputStream is) throws IOException {
+        Objects.requireNonNull(is);
+
+        // 标识
+        is.mark(LEN + 1);
+
+        byte[] b = new byte[LEN];
+        try {
+            int num = is.read(b, 0, LEN);
+            if (num < LEN) {
+                throw new RuntimeException("can not read file head");
+            }
+        } finally {
+            // 重置，否则无法重复读取流
+            is.reset();
+        }
+        return bytes2hex(b);
+    }
+
+    private static String bytes2hex(byte[] bytes) {
+        StringBuilder builder = new StringBuilder();
+        for (byte b : bytes) {
+            int v = b & 0xFF;
+            String hv = Integer.toHexString(v);
+            if (hv.length() < 2) {
+                builder.append(0);
+            }
+            builder.append(hv.toUpperCase());
+        }
+        return builder.toString();
+    }
+
+}
+```
+
+#### 测试
+
+测试如下：
+
+```java
+package tk.fishfish.easyjava.util;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.io.ClassPathResource;
+
+import java.io.BufferedInputStream;
+import java.io.IOException;
+
+/**
+ * 文件类型工具测试
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class FileTypeUtilsTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(FileTypeUtilsTest.class);
+
+    @Test
+    public void isXml() throws IOException {
+        ClassPathResource resource = new ClassPathResource("logback-spring.xml");
+        BufferedInputStream bis = new BufferedInputStream(resource.getInputStream());
+      	// 判断是否为XML格式
+        boolean isXml = FileTypeUtils.isType(bis, FileType.XML);
+        LOG.info("isXml: {}", isXml);
+    }
+
+}
+```
+
 ## 线程池
 
 根据阿里[p3c规范](https://github.com/alibaba/p3c)，推荐通过线程池来创建线程。
