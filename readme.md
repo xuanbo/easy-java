@@ -21,6 +21,7 @@
 * [ORM](#ORM)
 * [Redis](#Redis)
 * [Excel导入导出](#Excel导入导出)
+* [JVM](#JVM)
 * [Kafka](#Kafka)
 * [Hive](#Hive)
 * [HBase](#HBase)
@@ -2886,7 +2887,7 @@ public void delBigSet(String host, int port, String password, String bigSetKey) 
         }
         cursor = scanResult.getStringCursor();
     } while (!"0".equals(cursor));
-    //删除bigkey
+    // 删除bigkey
     jedis.del(bigSetKey);
 }
 ```
@@ -2911,7 +2912,7 @@ public void delBigZset(String host, int port, String password, String bigZsetKey
         }
         cursor = scanResult.getStringCursor();
     } while (!"0".equals(cursor));
-    //删除bigkey
+    // 删除bigkey
     jedis.del(bigZsetKey);
 }
 ```
@@ -3205,7 +3206,7 @@ public class EasyExcelTest {
 
         EasyExcel.write("demo.xlsx")
                 .head(head(data))
-          			// 注册自定义类型转换
+                // 注册自定义类型转换
                 .registerConverter(new TimestampConverter())
                 .sheet("data")
                 .doWrite(data(data));
@@ -3232,6 +3233,16 @@ public class EasyExcelTest {
 ### 分页
 
 参考官方的[测试代码](https://github.com/alibaba/easyexcel/blob/v2.0.5/src/test/java/com/alibaba/easyexcel/test/demo/write/WriteTest.java#L124)即可。
+
+## JVM
+
+### 自定义类加载
+
+待续
+
+### SPI机制
+
+待续
 
 ## Kafka
 
