@@ -26,6 +26,7 @@
 * [Hive](#Hive)
 * [HBase](#HBase)
 * [待续](#待续)
+* [说明](#说明)
 
 ## maven
 
