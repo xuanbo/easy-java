@@ -3242,7 +3242,74 @@ public class EasyExcelTest {
 
 ### SPI机制
 
-待续
+`SPI`全称`Service Provider Interface`，是`Java`提供的一套用来被第三方实现或者扩展的`API`，它可以用来启用框架扩展和替换组件。
+
+#### 场景
+
+比较常见的例子：
+
+* 数据库驱动（Driver）加载接口实现类的加载
+* `SLF4J`加载不同提供商的日志实现类
+* Spring中大量使用了SPI，比如：对servlet3.0规范对`ServletContainerInitializer`的实现、自动类型转换Type Conversion SPI（Converter SPI、Formatter SPI）等
+* Dubbo、Motan等RPC框架中也大量使用SPI的方式实现框架的扩展，不过它对Java提供的原生SPI做了封装，允许用户扩展实现Filter接口
+
+#### 约定
+
+1. 当服务提供者提供了接口的一种具体实现后，在jar包的`META-INF/services`目录下创建一个以"接口全限定名"为命名的文件，内容为实现类的全限定名
+2. 接口实现类所在的jar包放在主程序的classpath中
+3. 主程序通过`java.util.ServiceLoder`动态装载实现模块，它通过扫描`META-INF/services`目录下的配置文件找到实现类的全限定名，把类加载到JVM
+4. SPI的实现类必须携带一个不带参数的构造方法
+
+#### 示例
+
+比如，我们查找下`java.sql.Driver`接口的提供类有哪些：
+
+```java
+package tk.fishfish.easyjava.jvm;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.sql.Driver;
+import java.util.ServiceLoader;
+
+/**
+ * SPI机制
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class SpiTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(SpiTest.class);
+
+    @Test
+    public void loader() {
+        ServiceLoader<Driver> driverServiceLoader = ServiceLoader.load(Driver.class);
+        for (Driver driver : driverServiceLoader) {
+            LOG.info("driver: {}", driver.getClass().getName());
+        }
+    }
+
+}
+```
+
+可以看到，找到了MySQL的驱动实现。
+
+![spi-driver](./doc/spi-driver.jpg)
+
+我们看MySQL的驱动包结构，也能发现在`META-INF/services`目录下有个`java.sql.Driver`文件名的文件，里面是实现类的全类名。
+
+![spi-driver-mysql](./doc/spi-driver-mysql.jpg)
+
+#### 总结
+
+在自己开发一些框架的时候，如果提供插件。可使用SPI机制，动态查找到实现类，从而可插拔，而又不需要大量的配置或耦合spring的依赖注入。
+
+#### 参考
+
+* [高级开发必须理解的Java中SPI机制](https://www.jianshu.com/p/46b42f7f593c)
 
 ## Kafka
 
