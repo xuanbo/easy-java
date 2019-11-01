@@ -3238,7 +3238,99 @@ public class EasyExcelTest {
 
 ### 自定义类加载
 
-待续
+#### 双亲委托模型
+
+![classloader-model](./doc/classloader-model.png)
+
+网上找找资料，了解双亲委托模型。
+
+记住：
+
+* 加载class时，一直委托给父`ClassLoader`加载。直到最终无法加载，才自己加载。
+
+* 不同的`ClassLoader`可以加载同一class（全类名相同），生成不同实例。但是，这两个class实例生成的对象不能强转
+
+#### 自定义ClassLoader
+
+继承`java.lang.ClassLoader`对象，覆盖`findClass`方法。一般的，为了加载本地目录的某个jar，继承`java.net.URLClassLoader`即可。
+
+```java
+package tk.fishfish.easyjava.jvm;
+
+import java.net.URL;
+import java.net.URLClassLoader;
+
+/**
+ * 自定义ClassLoader
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class MyClassLoader extends URLClassLoader {
+
+    public MyClassLoader(URL[] urls, ClassLoader parent) {
+        super(urls, parent);
+    }
+
+}
+```
+
+#### 加载
+
+这里采用自定义的`tk.fishfish.easyjava.jvm.MyClassLoader`来加载本地打包的jar，然后比较加载的Class与系统加载的同一类的Class是否相同。
+
+```java
+package tk.fishfish.easyjava.jvm;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import tk.fishfish.easyjava.Application;
+
+import java.io.File;
+import java.net.MalformedURLException;
+import java.net.URL;
+
+/**
+ * 测试自定义ClassLoader
+ *
+ * @author 奔波儿灞
+ * @since 1.0
+ */
+public class MyClassLoaderTest {
+
+    private static final Logger LOG = LoggerFactory.getLogger(MyClassLoaderTest.class);
+
+    @Test
+    public void loadClass() throws MalformedURLException, ClassNotFoundException {
+        File jar = new File("target/easy-java-1.0.0-SNAPSHOT.jar.original");
+        if (jar.isFile()) {
+            URL targetUrl = jar.toURI().toURL();
+            // 加载，不指定parent，则parent默认为系统类加载器
+            MyClassLoader classLoader = new MyClassLoader(new URL[]{targetUrl}, null);
+            Class<?> clazz = Class.forName("tk.fishfish.easyjava.Application", true, classLoader);
+            LOG.info("equals: {}", clazz.equals(Application.class));
+        } else {
+            throw new RuntimeException("must be jar");
+        }
+    }
+
+}
+```
+
+显然，`tk.fishfish.easyjava.Application`类由不同的ClassLoader加载，他们的Class调用equals方法比较是不同的。
+
+![classloader-result](./doc/classloader-result.jpg)
+
+#### 思考
+
+这里为什么不用`target/easy-java-1.0.0-SNAPSHOT.jar`测试？因为，spring boot打包有点特殊，是无法加载到`tk.fishfish.easyjava.Application`的。
+
+原因就是，spring boot也是自定义ClassLoader来加载jar咯。可以参考该[博客](https://blog.csdn.net/caoyi1207/article/details/80606232)，了解一下。
+
+#### 总结
+
+有了自定义ClassLoader，那么可以实现热加载、相同类名的隔离（全类名相同的类，但是代码不同）等。
 
 ### SPI机制
 
@@ -3250,7 +3342,7 @@ public class EasyExcelTest {
 
 * 数据库驱动（Driver）加载接口实现类的加载
 * `SLF4J`加载不同提供商的日志实现类
-* Spring中大量使用了SPI，比如：对servlet3.0规范对`ServletContainerInitializer`的实现、自动类型转换Type Conversion SPI（Converter SPI、Formatter SPI）等
+* Spring中大量使用了SPI，比如：对servlet 3.0规范对`ServletContainerInitializer`的实现、自动类型转换Type Conversion SPI（Converter SPI、Formatter SPI）等
 * Dubbo、Motan等RPC框架中也大量使用SPI的方式实现框架的扩展，不过它对Java提供的原生SPI做了封装，允许用户扩展实现Filter接口
 
 #### 约定
@@ -3508,3 +3600,7 @@ public void onMessage(ConsumerRecord<String, String> record, Acknowledgment ack)
 待续
 
 ## 待续
+
+## 说明
+
+以上内容，如果有错误，欢迎批评指正。如果在工作或学习上帮到了你，给个star哟！
