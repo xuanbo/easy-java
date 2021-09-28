@@ -3407,6 +3407,217 @@ public class SpiTest {
 
 java util concurrent包
 
+### LinkedBlockingQueue
+
+`LinkedBlockingQueue`内部由**单链表实现**，只能从head取元素，从tail添加元素。添加元素和获取元素都有独立的锁，也就是说`LinkedBlockingQueue`是**读写分离的**，读写操作可以并行执行。`LinkedBlockingQueue`采用可重入锁(**ReentrantLock)**来保证在并发情况下的线程安全。
+
+```java
+/** Lock held by take, poll, etc */
+private final ReentrantLock takeLock = new ReentrantLock();
+
+/** Wait queue for waiting takes */
+private final Condition notEmpty = takeLock.newCondition();
+
+/** Lock held by put, offer, etc */
+private final ReentrantLock putLock = new ReentrantLock();
+
+/** Wait queue for waiting puts */
+private final Condition notFull = putLock.newCondition();
+```
+
+#### 常用操作
+
+取数据
+
+- **take()：当队列为空时阻塞**
+
+- poll()：弹出队顶元素，队列为空时，返回空
+
+- peek()：和poll类似，返回队顶元素，但顶元素不弹出。队列为空时返回null
+
+- remove(Object o)：移除某个元素，队列为空时抛出异常。成功移除返回true
+
+添加数据
+
+- **put()：队列满时阻塞**
+
+- offer()：队列满时返回false
+
+#### 如何使用
+
+一般用于生产者消费者模型：
+
+```java
+package tk.fishfish.easyjava.concurrent;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * LinkedBlockingQueue测试
+ *
+ * @author 奔波儿灞
+ * @version 1.0
+ */
+public class LinkedBlockingQueueTest {
+
+    private final Logger logger = LoggerFactory.getLogger(LinkedBlockingQueueTest.class);
+
+    @Test
+    public void run() {
+        LinkedBlockingQueue<String> queue = new LinkedBlockingQueue<>(1024);
+        // 生产者
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (true) {
+                    try {
+                        // 队列满了后等1s，如果仍然满了，则丢弃
+                        boolean offer = queue.offer(UUID.randomUUID().toString(), 1, TimeUnit.SECONDS);
+                        if (!offer) {
+                            logger.warn("queue full");
+                        }
+                    } catch (InterruptedException e) {
+                        logger.warn("Thread interrupted", e);
+                    }
+                }
+            }
+        }).start();
+        // 消费者处理
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (true) {
+                    try {
+                        String item = queue.poll(1, TimeUnit.SECONDS);
+                        if (item == null) {
+                            logger.info("no item");
+                        } else {
+                            // 模拟消费时常
+                            Thread.sleep(3000);
+                            logger.info("item: {}", item);
+                        }
+                    } catch (InterruptedException e) {
+                        logger.warn("Thread interrupted", e);
+                    }
+                }
+            }
+        }).start();
+        // 消费者处理，每次提取多个
+        new Thread(new Runnable() {
+            private final int capacity = 128;
+            private final List<String> buffer = new ArrayList<>(capacity);
+
+            @Override
+            public void run() {
+                while (true) {
+                    // 每次提取128个，数据不够时等待500ms
+                    int size = queue.drainTo(buffer, capacity);
+                    logger.info("drain size: {}", size);
+                    buffer.clear();
+                    try {
+                        Thread.sleep(10000);
+                        if (size < capacity) {
+                            Thread.sleep(500);
+                        }
+                    } catch (InterruptedException e) {
+                        logger.warn("Thread interrupted", e);
+                    }
+                }
+            }
+        }).start();
+        // main等待
+        try {
+            Thread.sleep(30_000);
+        } catch (InterruptedException e) {
+            logger.warn("main Thread interrupted", e);
+        }
+    }
+
+}
+```
+
+#### 原理分析
+
+put过程：
+
+- put锁
+
+- 判断队列是否满了，满了则等待
+- enqueue(node)，在队尾增加元素
+- 队列长度加1，此时如果队列还没有满，唤醒其他put堵塞队列
+
+```java
+public void put(E e) throws InterruptedException {
+  if (e == null) throw new NullPointerException();
+  // Note: convention in all put/take/etc is to preset local var
+  // holding count negative to indicate failure unless set.
+  int c = -1;
+  Node<E> node = new Node<E>(e);
+  final ReentrantLock putLock = this.putLock;
+  final AtomicInteger count = this.count;
+  putLock.lockInterruptibly();
+  try {
+    /*
+     * Note that count is used in wait guard even though it is
+     * not protected by lock. This works because count can
+     * only decrease at this point (all other puts are shut
+     * out by lock), and we (or some other waiting put) are
+     * signalled if it ever changes from capacity. Similarly
+     * for all other uses of count in other wait guards.
+     */
+    while (count.get() == capacity) {
+      notFull.await();
+    }
+    enqueue(node);
+    c = count.getAndIncrement();
+    if (c + 1 < capacity)
+      notFull.signal();
+  } finally {
+    putLock.unlock();
+  }
+  if (c == 0)
+    signalNotEmpty();
+}
+```
+
+take过程：
+
+- take锁
+- 没有数据，则阻塞；否则dequeue()从队列头部获取数据
+- 判断队列长度是否大于1，大于则唤醒其他take阻塞队列
+
+```java
+public E take() throws InterruptedException {
+  E x;
+  int c = -1;
+  final AtomicInteger count = this.count;
+  final ReentrantLock takeLock = this.takeLock;
+  takeLock.lockInterruptibly();
+  try {
+    while (count.get() == 0) {
+      notEmpty.await();
+    }
+    x = dequeue();
+    c = count.getAndDecrement();
+    if (c > 1)
+      notEmpty.signal();
+  } finally {
+    takeLock.unlock();
+  }
+  if (c == capacity)
+    signalNotFull();
+  return x;
+}
+```
+
 ### DelayQueue
 
 `DelayQueue`是`BlockingQueue`的一种，所以它是**线程安全**的，`DelayQueue`的特点就是插入Queue中的数据可以按照自定义的delay时间进行排序。只有delay时间小于0的元素才能够被取出。
@@ -3544,6 +3755,22 @@ public class DelayQueueTest {
 15:48:02.545 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - no item
 15:48:03.548 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - no item
 ```
+
+#### 常用操作
+
+取数据
+
+- **take()：当队列为空时阻塞**
+
+- poll()：弹出队顶元素，队列为空时，返回空
+
+- peek()：和poll类似，返回队顶元素，但顶元素不弹出。队列为空时返回null
+
+添加数据
+
+- **put()：队列满时阻塞**
+
+- offer()：队列满时返回false
 
 #### 原理分析
 
