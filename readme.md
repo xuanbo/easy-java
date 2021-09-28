@@ -22,6 +22,7 @@
 * [Redis](#Redis)
 * [Excel导入导出](#Excel导入导出)
 * [JVM](#JVM)
+* [Concurrent](#Concurrent)
 * [Kafka](#Kafka)
 * [Hive](#Hive)
 * [HBase](#HBase)
@@ -824,10 +825,10 @@ JDK默认实现**比较适合cpu密集型任务**，对于IO密集型任务，�
 
     ```java
     package tk.fishfish.easyjava.threadpool;
-
+    
     import java.util.concurrent.LinkedTransferQueue;
     import java.util.concurrent.RejectedExecutionException;
-
+    
     /**
     * LinkedTransferQueue 能保证更高性能，相比与LinkedBlockingQueue有明显提升
     * <p>
@@ -839,17 +840,17 @@ JDK默认实现**比较适合cpu密集型任务**，对于IO密集型任务，�
     * @since 1.0
     */
     public class ExecutorQueue extends LinkedTransferQueue<Runnable> {
-
+    
         private StandardThreadExecutor threadPoolExecutor;
-
+    
         public ExecutorQueue() {
             super();
         }
-
+    
         public void setStandardThreadExecutor(StandardThreadExecutor threadPoolExecutor) {
             this.threadPoolExecutor = threadPoolExecutor;
         }
-
+    
         /**
         * 注：代码来源于 tomcat
         *
@@ -863,7 +864,7 @@ JDK默认实现**比较适合cpu密集型任务**，对于IO密集型任务，�
             // forces the item onto the queue, to be used if the task is rejected
             return super.offer(runnable);
         }
-
+    
         /**
         * 注：tomcat的代码进行一些小变更
         * 在提交的任务数超过poolSize, 而poolSize小于最大线程数的时候返回false, 让executor创建线程
@@ -874,7 +875,7 @@ JDK默认实现**比较适合cpu密集型任务**，对于IO密集型任务，�
         @Override
         public boolean offer(Runnable runnable) {
             int poolSize = threadPoolExecutor.getPoolSize();
-
+    
             // we are maxed out on threads, simply queue the object
             if (poolSize == threadPoolExecutor.getMaximumPoolSize()) {
                 return super.offer(runnable);
@@ -891,7 +892,7 @@ JDK默认实现**比较适合cpu密集型任务**，对于IO密集型任务，�
             // if we reached here, we need to add it to the queue
             return super.offer(runnable);
         }
-
+    
     }
     ```
 
@@ -2200,7 +2201,7 @@ public class LogTest {
 
     <!-- 标准输出 -->
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
             <!--格式化输出：%-5level：级别从左显示5个字符宽度，%d表示日期，%thread表示线程名，%-50logger{50}：输入方法，%msg：日志消息，%n是换行符-->
             <pattern>%highlight(%-5level) %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %cyan(%-50logger{50}) - %highlight(%msg%n)</pattern>
         </encoder>
@@ -2208,20 +2209,18 @@ public class LogTest {
 
     <!-- 按照每天生成日志文件 -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <!--日志文件输出的文件名-->
-            <FileNamePattern>${logger.home}/${logger.app}.%d{yyyy-MM-dd}.log</FileNamePattern>
+            <FileNamePattern>${logger.home}/${logger.app}.%d{yyyy-MM-dd}.%i.log</FileNamePattern>
             <!--日志文件保留天数-->
             <MaxHistory>15</MaxHistory>
+            <!--日志文件最大的大小-->
+            <MaxFileSize>50MB</MaxFileSize>
         </rollingPolicy>
-        <layout class="ch.qos.logback.classic.PatternLayout">
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
             <!--格式化输出：%-5level：级别从左显示5个字符宽度，%d表示日期，%thread表示线程名，%-50logger{50}：输入方法，%msg：日志消息，%n是换行符-->
             <pattern>%highlight(%-5level) %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %cyan(%-50logger{50}) - %highlight(%msg%n)</pattern>
-        </layout>
-        <!--日志文件最大的大小-->
-        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
-            <MaxFileSize>50MB</MaxFileSize>
-        </triggeringPolicy>
+        </encoder>
     </appender>
 
     <!-- 异步输出日志 -->
@@ -3403,6 +3402,172 @@ public class SpiTest {
 #### 参考
 
 * [高级开发必须理解的Java中SPI机制](https://www.jianshu.com/p/46b42f7f593c)
+
+## Concurrent
+
+java util concurrent包
+
+### DelayQueue
+
+`DelayQueue`是`BlockingQueue`的一种，所以它是**线程安全**的，`DelayQueue`的特点就是插入Queue中的数据可以按照自定义的delay时间进行排序。只有delay时间小于0的元素才能够被取出。
+
+`DelayQueue`一般用于生产者消费者模式。
+
+#### 如何使用
+
+首先定义`Delayed`对象：
+
+```java
+package tk.fishfish.easyjava.concurrent;
+
+import java.util.concurrent.Delayed;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Delayed对象
+ *
+ * @author 奔波儿灞
+ * @version 1.0
+ */
+public class DelayData<T> implements Delayed {
+
+    /**
+     * 数据
+     */
+    private final T item;
+
+    /**
+     * 过期时间
+     */
+    private final long expireTimestamp;
+
+    public DelayData(T item, long expireTimestamp) {
+        this.item = item;
+        this.expireTimestamp = expireTimestamp;
+    }
+
+    @Override
+    public long getDelay(TimeUnit unit) {
+        long diffTime = expireTimestamp - System.currentTimeMillis();
+        return unit.convert(diffTime, TimeUnit.MILLISECONDS);
+    }
+
+    @Override
+    public int compareTo(Delayed o) {
+        return (int) (this.expireTimestamp - ((DelayData<T>) o).getExpireTimestamp());
+    }
+
+    public T getItem() {
+        return item;
+    }
+
+    public long getExpireTimestamp() {
+        return expireTimestamp;
+    }
+
+}
+```
+
+生产者消费者使用：
+
+```java
+package tk.fishfish.easyjava.concurrent;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.DelayQueue;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * DelayQueue测试
+ *
+ * @author 奔波儿灞
+ * @version 1.0
+ */
+public class DelayQueueTest {
+
+    private final Logger logger = LoggerFactory.getLogger(DelayQueueTest.class);
+
+    @Test
+    public void run() {
+        final DelayQueue<DelayData<String>> queue = new DelayQueue<>();
+        // 模拟生产者放入数据
+        queue.add(new DelayData<>("ID=1", System.currentTimeMillis() + 5_000));
+        queue.add(new DelayData<>("ID=2", System.currentTimeMillis() + 10_000));
+        // 消费者处理
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (true) {
+                    try {
+                        DelayData<String> data = queue.poll(1, TimeUnit.SECONDS);
+                        if (data == null) {
+                            logger.info("no item");
+                        } else {
+                            logger.info("item: {}", data.getItem());
+                        }
+                    } catch (InterruptedException e) {
+                        logger.warn("Thread interrupted", e);
+                    }
+                }
+            }
+        }).start();
+        // main等待
+        try {
+            Thread.sleep(30_000);
+        } catch (InterruptedException e) {
+            logger.warn("main Thread interrupted", e);
+        }
+    }
+
+}
+```
+
+输出：
+
+```
+15:47:49.531 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - no item
+15:47:50.536 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - no item
+15:47:51.542 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - no item
+15:47:52.546 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - no item
+15:47:53.529 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - item: ID=1
+15:47:54.536 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - no item
+15:47:55.540 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - no item
+15:47:56.541 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - no item
+15:47:57.543 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - no item
+15:47:58.529 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - item: ID=2
+15:47:59.534 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - no item
+15:48:00.538 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - no item
+15:48:01.540 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - no item
+15:48:02.545 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - no item
+15:48:03.548 [Thread-0] INFO tk.fishfish.easyjava.concurrent.DelayQueueTest - no item
+```
+
+#### 原理分析
+
+`DelayQueue`内部采用`PriorityQueue`存储数据。
+
+- 当调用add（offer）方法添加元素时，内部调用`PriorityQueue`的offer方法（底层要根据compareTo方法排序，一般把先过期的数据放前面）。
+
+- 当调用poll方法获取元素时，内部先调用`PriorityQueue`的peek方法获取第一个元素。如果存在，则调用getDelay方法判断是否达到时间，如果小于等于0则说明元素达到延迟时间，应该取出，此时调用内部`PriorityQueue`的poll方法。
+
+  ```java
+  public E poll() {
+    final ReentrantLock lock = this.lock;
+    lock.lock();
+    try {
+      E first = q.peek();
+      if (first == null || first.getDelay(NANOSECONDS) > 0)
+        return null;
+      else
+        return q.poll();
+    } finally {
+      lock.unlock();
+    }
+  }
+  ```
 
 ## Kafka
 
