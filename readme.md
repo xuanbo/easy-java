@@ -3407,6 +3407,136 @@ public class SpiTest {
 
 java util concurrent包
 
+### ConcurrentHashMap
+
+### ConcurrentSkipListMap
+
+### ConcurrentLinkedQueue
+
+### CopyOnWriteArrayList
+
+### SynchronousQueue
+
+`SynchronousQueue`是无界的，是一种无缓冲的等待队列，但是由于该Queue本身的特性，在某次添加元素后必须等待其他线程取走后才能继续添加；可以认为`SynchronousQueue`是一个缓存值为1的阻塞队列，但是isEmpty()方法永远返回是true，remainingCapacity() 方法永远返回是0，remove()和removeAll() 方法永远返回是false，iterator()方法永远返回空，peek()方法永远返回null。
+
+可以理解为"配对"队列。
+
+#### 特点
+
+1. 内部没有存储
+
+2. 阻塞队列
+
+3. 发送或者消费线程会阻塞，只要有一对消费和发送线程匹配上，才同时退出。
+
+4. 配对有公平模式和非公平模式(默认)
+
+   - 公平模式用队列实现 ，每次从队列head开始匹配。（FIFO）
+
+   - 非公平模式用栈实现，每次从栈顶开始匹配。（LIFO）
+
+     ```java
+     public SynchronousQueue() {
+       this(false);
+     }
+     
+     public SynchronousQueue(boolean fair) {
+       transferer = fair ? new TransferQueue<E>() : new TransferStack<E>();
+     }
+     ```
+
+#### 如何使用
+
+主要应用在线程池：
+
+```java
+package tk.fishfish.easyjava.concurrent;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.SynchronousQueue;
+
+/**
+ * SynchronousQueue测试
+ *
+ * @author 奔波儿灞
+ * @version 1.0
+ */
+public class SynchronousQueueTest {
+
+    private final Logger logger = LoggerFactory.getLogger(SynchronousQueueTest.class);
+
+    @Test
+    public void run() throws InterruptedException {
+        SynchronousQueue<String> queue = new SynchronousQueue<>(true);
+        // 生产者
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    logger.info("PUT A start");
+                    queue.put("A");
+                    logger.info("PUT A end");
+                } catch (InterruptedException e) {
+                    logger.warn("Thread interrupted", e);
+                }
+            }
+        }).start();
+        Thread.sleep(1000);
+        // 生产者
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    logger.info("PUT B start");
+                    queue.put("B");
+                    logger.info("PUT B end");
+                } catch (InterruptedException e) {
+                    logger.warn("Thread interrupted", e);
+                }
+            }
+        }).start();
+        Thread.sleep(1000);
+        // take
+        try {
+            logger.info("TAKE start");
+            String item = queue.take();
+            logger.info("TAKE end: {}", item);
+        } catch (InterruptedException e) {
+            logger.warn("Thread interrupted", e);
+        }
+        Thread.sleep(1000);
+    }
+
+}
+```
+
+在公平模式下输出：
+
+```
+18:19:14.726 [Thread-0] INFO tk.fishfish.easyjava.concurrent.SynchronousQueueTest - PUT A start
+18:19:15.729 [Thread-1] INFO tk.fishfish.easyjava.concurrent.SynchronousQueueTest - PUT B start
+18:19:16.733 [main] INFO tk.fishfish.easyjava.concurrent.SynchronousQueueTest - TAKE start
+18:19:16.733 [Thread-0] INFO tk.fishfish.easyjava.concurrent.SynchronousQueueTest - PUT A end
+18:19:16.733 [main] INFO tk.fishfish.easyjava.concurrent.SynchronousQueueTest - TAKE end: A
+```
+
+此时，获取的是A，唤醒的也是A。（队列的特点）
+
+在不公平模式下输出：
+
+```
+18:19:46.784 [Thread-0] INFO tk.fishfish.easyjava.concurrent.SynchronousQueueTest - PUT A start
+18:19:47.787 [Thread-1] INFO tk.fishfish.easyjava.concurrent.SynchronousQueueTest - PUT B start
+18:19:48.789 [main] INFO tk.fishfish.easyjava.concurrent.SynchronousQueueTest - TAKE start
+18:19:48.790 [Thread-1] INFO tk.fishfish.easyjava.concurrent.SynchronousQueueTest - PUT B end
+18:19:48.790 [main] INFO tk.fishfish.easyjava.concurrent.SynchronousQueueTest - TAKE end: B
+```
+
+此时，获取的是B，唤醒的也是B。（栈的特点）
+
 ### LinkedBlockingQueue
 
 `LinkedBlockingQueue`内部由**单链表实现**，只能从head取元素，从tail添加元素。添加元素和获取元素都有独立的锁，也就是说`LinkedBlockingQueue`是**读写分离的**，读写操作可以并行执行。`LinkedBlockingQueue`采用可重入锁(**ReentrantLock)**来保证在并发情况下的线程安全。
@@ -3617,6 +3747,80 @@ public E take() throws InterruptedException {
   return x;
 }
 ```
+
+### LinkedTransferQueue
+
+利用`LinkedBlockingQueue`和`SynchronousQueue`的特点实现。相比较 `SynchronousQueue`多了一个可以存储的队列，相比较`LinkedBlockingQueue`多了直接传递元素。
+
+![linkedtransferqueue](doc/linkedtransferqueue.png)
+
+### PriorityBlockingQueue
+
+优先级阻塞队列，底层采用数组存储数据，并根据compareTo接口进行排序，利用可重入锁(**ReentrantLock)**来保证在并发情况下的线程安全。
+
+- 扩容。
+
+  - 添加元素时，检测容量已满，则进行扩容。
+
+    ```java
+    public boolean offer(E e) {
+        if (e == null)
+            throw new NullPointerException();
+        final ReentrantLock lock = this.lock;
+        lock.lock();
+        int n, cap;
+        Object[] array;
+        while ((n = size) >= (cap = (array = queue).length))
+            tryGrow(array, cap);
+        try {
+            Comparator<? super E> cmp = comparator;
+            if (cmp == null)
+                siftUpComparable(n, e, array);
+            else
+                siftUpUsingComparator(n, e, array, cmp);
+            size = n + 1;
+            notEmpty.signal();
+        } finally {
+            lock.unlock();
+        }
+        return true;
+    }
+    ```
+
+  - 当容量小于64时，每次扩容oldCap + 2；否则扩容oldCap >> 1（原始容量的一半）。
+
+    ```java
+    private void tryGrow(Object[] array, int oldCap) {
+      lock.unlock(); // must release and then re-acquire main lock
+      Object[] newArray = null;
+      if (allocationSpinLock == 0 &&
+          UNSAFE.compareAndSwapInt(this, allocationSpinLockOffset,
+                                   0, 1)) {
+        try {
+          int newCap = oldCap + ((oldCap < 64) ?
+                                 (oldCap + 2) : // grow faster if small
+                                 (oldCap >> 1));
+          if (newCap - MAX_ARRAY_SIZE > 0) {    // possible overflow
+            int minCap = oldCap + 1;
+            if (minCap < 0 || minCap > MAX_ARRAY_SIZE)
+              throw new OutOfMemoryError();
+            newCap = MAX_ARRAY_SIZE;
+          }
+          if (newCap > oldCap && queue == array)
+            newArray = new Object[newCap];
+        } finally {
+          allocationSpinLock = 0;
+        }
+      }
+      if (newArray == null) // back off if another thread is allocating
+        Thread.yield();
+      lock.lock();
+      if (newArray != null && queue == array) {
+        queue = newArray;
+        System.arraycopy(array, 0, newArray, 0, oldCap);
+      }
+    }
+    ```
 
 ### DelayQueue
 
