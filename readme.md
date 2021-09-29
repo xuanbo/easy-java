@@ -3415,6 +3415,75 @@ java util concurrent包
 
 ### CopyOnWriteArrayList
 
+`CopyOnWriteArrayList`是`ArrayList`的线程安全版本，在有写操作的时候会copy一份数据，然后写完再设置成新的数据。适用于读多写少的并发场景。
+
+```java
+/** The lock protecting all mutators */
+final transient ReentrantLock lock = new ReentrantLock();
+
+/** The array, accessed only via getArray/setArray. */
+private transient volatile Object[] array;
+```
+
+#### 应用
+
+- spring cloud netflix eureka client存储服务列表
+
+#### 原理分析
+
+写操作：
+
+- 获取锁
+- 复制数组，长度+1，并赋值
+- 设置新array的引用
+- 释放锁
+
+```java
+public boolean add(E e) {
+  final ReentrantLock lock = this.lock;
+  lock.lock();
+  try {
+    Object[] elements = getArray();
+    int len = elements.length;
+    Object[] newElements = Arrays.copyOf(elements, len + 1);
+    newElements[len] = e;
+    setArray(newElements);
+    return true;
+  } finally {
+    lock.unlock();
+  }
+}
+```
+
+读操作：
+
+- 直接根据下标获取array对应的值
+
+```java
+private E get(Object[] a, int index) {
+  return (E) a[index];
+}
+
+/**
+ * {@inheritDoc}
+ *
+ * @throws IndexOutOfBoundsException {@inheritDoc}
+ */
+public E get(int index) {
+  return get(getArray(), index);
+}
+```
+
+迭代：
+
+- 获取当前array的引用。如果后续array变化了（因为每次写操作都会有新的拷贝），迭代器是感知不到的。
+
+```java
+public Iterator<E> iterator() {
+    return new COWIterator<E>(getArray(), 0);
+}
+```
+
 ### SynchronousQueue
 
 `SynchronousQueue`是无界的，是一种无缓冲的等待队列，但是由于该Queue本身的特性，在某次添加元素后必须等待其他线程取走后才能继续添加；可以认为`SynchronousQueue`是一个缓存值为1的阻塞队列，但是isEmpty()方法永远返回是true，remainingCapacity() 方法永远返回是0，remove()和removeAll() 方法永远返回是false，iterator()方法永远返回空，peek()方法永远返回null。
