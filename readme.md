@@ -3409,9 +3409,174 @@ java util concurrent包
 
 ### ConcurrentHashMap
 
+对于Java1.7，是基于segments分段进行实现。[漫画：什么是ConcurrentHashMap](https://zhuanlan.zhihu.com/p/31614308)
+
+Java1.8则已经抛弃了segment分段锁机制，利用CAS+Synchronized来保证并发更新的安全，底层依然采用数组+链表+红黑树的存储结构。
+
+对于put操作：
+
+```java
+final V putVal(K key, V value, boolean onlyIfAbsent) {
+  if (key == null || value == null) throw new NullPointerException();
+  int hash = spread(key.hashCode());
+  int binCount = 0;
+  for (Node<K,V>[] tab = table;;) {
+    Node<K,V> f; int n, i, fh;
+    if (tab == null || (n = tab.length) == 0)
+      tab = initTable();
+    else if ((f = tabAt(tab, i = (n - 1) & hash)) == null) {
+      if (casTabAt(tab, i, null,
+                   new Node<K,V>(hash, key, value, null)))
+        break;                   // no lock when adding to empty bin
+    }
+    else if ((fh = f.hash) == MOVED)
+      tab = helpTransfer(tab, f);
+    else {
+      V oldVal = null;
+      synchronized (f) {
+        if (tabAt(tab, i) == f) {
+          if (fh >= 0) {
+            binCount = 1;
+            for (Node<K,V> e = f;; ++binCount) {
+              K ek;
+              if (e.hash == hash &&
+                  ((ek = e.key) == key ||
+                   (ek != null && key.equals(ek)))) {
+                oldVal = e.val;
+                if (!onlyIfAbsent)
+                  e.val = value;
+                break;
+              }
+              Node<K,V> pred = e;
+              if ((e = e.next) == null) {
+                pred.next = new Node<K,V>(hash, key,
+                                          value, null);
+                break;
+              }
+            }
+          }
+          else if (f instanceof TreeBin) {
+            Node<K,V> p;
+            binCount = 2;
+            if ((p = ((TreeBin<K,V>)f).putTreeVal(hash, key,
+                                                  value)) != null) {
+              oldVal = p.val;
+              if (!onlyIfAbsent)
+                p.val = value;
+            }
+          }
+        }
+      }
+      if (binCount != 0) {
+        if (binCount >= TREEIFY_THRESHOLD)
+          treeifyBin(tab, i);
+        if (oldVal != null)
+          return oldVal;
+        break;
+      }
+    }
+  }
+  addCount(1L, binCount);
+  return null;
+}
+```
+
+对于get操作：
+
+```java
+public V get(Object key) {
+  Node<K,V>[] tab; Node<K,V> e, p; int n, eh; K ek;
+  int h = spread(key.hashCode());
+  if ((tab = table) != null && (n = tab.length) > 0 &&
+      (e = tabAt(tab, (n - 1) & h)) != null) {
+    if ((eh = e.hash) == h) {
+      if ((ek = e.key) == key || (ek != null && key.equals(ek)))
+        return e.val;
+    }
+    else if (eh < 0)
+      return (p = e.find(h, key)) != null ? p.val : null;
+    while ((e = e.next) != null) {
+      if (e.hash == h &&
+          ((ek = e.key) == key || (ek != null && key.equals(ek))))
+        return e.val;
+    }
+  }
+  return null;
+}
+```
+
+可以看到get操作全程没有加锁，由于table、node均使用了volatile修饰，因此保证了可见性。所以get是弱一致性。
+
 ### ConcurrentSkipListMap
 
+`ConcurrentSkipListMap`是基于SkipList（跳表）来实现Map，利用CAS来保证并发更新的安全。
+
+![concurrentskiplistmap](doc/concurrentskiplistmap.png)
+
+采用分层索引的结构，以空间换时间。
+
 ### ConcurrentLinkedQueue
+
+`ConcurrentLinkedQueue`是一个基于链表的无界线程安全的非阻塞队列，按照先进先出原则（FIFO）对元素进行排序。新元素从队列尾部插入，而获取队列元素，则需要从队列头部获取。
+
+从源码中能看出来，底层是基于CAS进行并发控制的。
+
+```java
+public boolean offer(E e) {
+  checkNotNull(e);
+  final Node<E> newNode = new Node<E>(e);
+
+  for (Node<E> t = tail, p = t;;) {
+    Node<E> q = p.next;
+    if (q == null) {
+      // p is last node
+      if (p.casNext(null, newNode)) {
+        // Successful CAS is the linearization point
+        // for e to become an element of this queue,
+        // and for newNode to become "live".
+        if (p != t) // hop two nodes at a time
+          casTail(t, newNode);  // Failure is OK.
+        return true;
+      }
+      // Lost CAS race to another thread; re-read next
+    }
+    else if (p == q)
+      // We have fallen off list.  If tail is unchanged, it
+      // will also be off-list, in which case we need to
+      // jump to head, from which all live nodes are always
+      // reachable.  Else the new tail is a better bet.
+      p = (t != (t = tail)) ? t : head;
+    else
+      // Check for tail updates after two hops.
+      p = (p != t && t != (t = tail)) ? t : q;
+  }
+}
+
+public E poll() {
+  restartFromHead:
+  for (;;) {
+    for (Node<E> h = head, p = h, q;;) {
+      E item = p.item;
+
+      if (item != null && p.casItem(item, null)) {
+        // Successful CAS is the linearization point
+        // for item to be removed from this queue.
+        if (p != h) // hop two nodes at a time
+          updateHead(h, ((q = p.next) != null) ? q : p);
+        return item;
+      }
+      else if ((q = p.next) == null) {
+        updateHead(h, p);
+        return null;
+      }
+      else if (p == q)
+        continue restartFromHead;
+      else
+        p = q;
+    }
+  }
+}
+```
 
 ### CopyOnWriteArrayList
 
@@ -3819,13 +3984,29 @@ public E take() throws InterruptedException {
 
 ### LinkedTransferQueue
 
-利用`LinkedBlockingQueue`和`SynchronousQueue`的特点实现。相比较 `SynchronousQueue`多了一个可以存储的队列，相比较`LinkedBlockingQueue`多了直接传递元素。
+结合`LinkedBlockingQueue`和`SynchronousQueue`的特点实现。相比较 `SynchronousQueue`多了一个可以存储的队列，相比较`LinkedBlockingQueue`多了直接传递元素，以及无阻塞。
 
 ![linkedtransferqueue](doc/linkedtransferqueue.png)
 
+底层使用链表存储数据，基于CAS进行并发控制，并能直接从head交换数据。
+
+```java
+/**
+ * Inserts the specified element at the tail of this queue.
+ * As the queue is unbounded, this method will never block.
+ *
+ * @throws NullPointerException if the specified element is null
+ */
+public void put(E e) {
+  xfer(e, true, ASYNC, 0);
+}
+```
+
+
+
 ### PriorityBlockingQueue
 
-优先级阻塞队列，底层采用数组存储数据，并根据compareTo接口进行排序，利用可重入锁(**ReentrantLock)**来保证在并发情况下的线程安全。
+`PriorityBlockingQueue`是优先级阻塞队列，底层采用数组存储数据，并根据compareTo接口进行排序，利用可重入锁(**ReentrantLock)**来保证在并发情况下的线程安全。
 
 - 扩容。
 
@@ -4068,6 +4249,238 @@ public class DelayQueueTest {
     }
   }
   ```
+
+### Exchanger
+
+Exchanger（交换者）是一个用于线程间协作的工具类。Exchanger用于进行线程间的数据交换。它提供一个同步点，在这个同步点两个线程可以交换彼此的数据。这两个线程通过exchange方法交换数据， 如果第一个线程先执行exchange方法，它会一直等待第二个线程也执行exchange，当两个线程都到达同步点时，这两个线程就可以交换数据，将本线程生产出来的数据传递给对方。
+
+#### 应用场景
+
+- 遗传算法，遗传算法里需要选出两个人作为交配对象，这时候会交换两人的数据，并使用交叉规则得出2个交配结果。
+- 校对工作。比如我们需要将纸制银流通过人工的方式录入成电子银行流水，为了避免错误，采用AB岗两人进行录入，录入到Excel之后，系统需要加载这两个Excel，并对这两个Excel数据进行校对，看看是否录入的一致。
+- 生产者消费者。生产者将数据交给消费者。
+
+#### 如何使用
+
+```java
+package tk.fishfish.easyjava.concurrent;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.UUID;
+import java.util.concurrent.Exchanger;
+
+/**
+ * Exchanger测试
+ *
+ * @author 奔波儿灞
+ * @version 1.0
+ */
+public class ExchangerTest {
+
+    private final Logger logger = LoggerFactory.getLogger(ExchangerTest.class);
+
+    @Test
+    public void run() {
+        Exchanger<String> exchanger = new Exchanger<>();
+        // 生产者
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (true) {
+                    try {
+                        String data = exchanger.exchange(UUID.randomUUID().toString());
+                        logger.info("投递给: {}", data);
+                    } catch (InterruptedException e) {
+                        logger.warn("Thread interrupted", e);
+                    }
+                }
+            }
+        }).start();
+        // 消费者
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (true) {
+                    try {
+                        String data = exchanger.exchange("Consumer-1");
+                        logger.info("接收到: {}", data);
+                    } catch (InterruptedException e) {
+                        logger.warn("Thread interrupted", e);
+                    }
+                }
+            }
+        }).start();
+        // main等待
+        try {
+            Thread.sleep(30_000);
+        } catch (InterruptedException e) {
+            logger.warn("main Thread interrupted", e);
+        }
+    }
+
+}
+```
+
+输出：
+
+```
+11:00:17.657 [Thread-0] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 投递给: Consumer-1
+11:00:17.657 [Thread-1] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 接收到: 1673319b-c249-4ff4-be07-5be96b27ca0d
+11:00:18.664 [Thread-0] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 投递给: Consumer-1
+11:00:18.664 [Thread-1] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 接收到: c061c0af-ce0e-481e-ab0e-eac03552f423
+11:00:19.669 [Thread-1] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 接收到: 1ebe7482-a2be-4d85-8fd6-679834c26849
+11:00:19.669 [Thread-0] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 投递给: Consumer-1
+11:00:20.672 [Thread-1] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 接收到: 349a4bd9-40da-464d-9d12-5e90f9010e85
+11:00:20.675 [Thread-0] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 投递给: Consumer-1
+11:00:21.679 [Thread-0] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 投递给: Consumer-1
+11:00:21.679 [Thread-1] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 接收到: 026df8fa-a135-4949-af9f-fb3acb659cb5
+11:00:22.683 [Thread-0] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 投递给: Consumer-1
+11:00:22.683 [Thread-1] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 接收到: 219d3258-3732-4652-b098-47665353d0b7
+11:00:23.687 [Thread-1] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 接收到: 22ba56b4-78c9-4d6f-bb01-b4988d78219c
+11:00:23.687 [Thread-0] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 投递给: Consumer-1
+```
+
+### CyclicBarrier
+
+`CyclicBarrier`的字面意思是可循环使用（Cyclic）的屏障（Barrier）。它要做的事情是，让一组线程到达一个屏障（也可以叫同步点）时被阻塞，直到最后一个线程到达屏障时，屏障才会开门，所有被屏障拦截的线程才会继续执行。CyclicBarrier默认的构造方法是CyclicBarrier(int parties)，其参数表示屏障拦截的线程数量，每个线程调用await方法告诉`CyclicBarrier`我已经到达了屏障，然后当前线程被阻塞。
+
+#### 应用场景
+
+- 任务组控制。所有线程都准备好之后，开始执行。
+
+#### 如何使用
+
+```java
+package tk.fishfish.easyjava.concurrent;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CyclicBarrier;
+
+/**
+ * CyclicBarrier测试
+ *
+ * @author 奔波儿灞
+ * @version 1.0
+ */
+public class CyclicBarrierTest {
+
+    private final Logger logger = LoggerFactory.getLogger(ExchangerTest.class);
+
+    @Test
+    public void run() {
+        CyclicBarrier cyclicBarrier = new CyclicBarrier(2);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                logger.info("准备");
+                try {
+                    cyclicBarrier.await();
+                } catch (InterruptedException | BrokenBarrierException e) {
+                    logger.warn("Thread cyclicBarrier await error", e);
+                }
+                logger.info("结束");
+            }
+        }).start();
+        logger.info("准备");
+        try {
+            cyclicBarrier.await();
+        } catch (InterruptedException | BrokenBarrierException e) {
+            logger.warn("Thread cyclicBarrier await error", e);
+        }
+        logger.info("结束");
+    }
+
+}
+```
+
+输出：
+
+```
+11:11:18.690 [Thread-0] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 准备
+11:11:18.690 [main] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 准备
+11:11:18.694 [Thread-0] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 结束
+11:11:18.694 [main] INFO tk.fishfish.easyjava.concurrent.ExchangerTest - 结束
+```
+
+### CountDownLatch
+
+`CountDownLatch`允许一个或多个线程等待其他线程完成操作。
+
+#### 应用场景
+
+- 等待其他多线程执行完毕。（thread join）
+
+#### 如何使用
+
+```java
+package tk.fishfish.easyjava.concurrent;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.CountDownLatch;
+
+/**
+ * CountDownLatch使用
+ *
+ * @author 奔波儿灞
+ * @version 1.0
+ */
+public class CountDownLatchTest {
+
+    private final Logger logger = LoggerFactory.getLogger(CountDownLatchTest.class);
+
+    @Test
+    public void run() {
+        CountDownLatch latch = new CountDownLatch(2);
+        // thread 1
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                logger.info("我开始执行...");
+                latch.countDown();
+                logger.info("我完成了！");
+            }
+        }).start();
+        // thread 1
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                logger.info("我开始执行...");
+                latch.countDown();
+                logger.info("我完成了！");
+            }
+        }).start();
+        logger.info("等待大家...");
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            logger.warn("Thread interrupted", e);
+        }
+        logger.info("大家都完成了！");
+    }
+
+}
+```
+
+输出：
+
+```
+11:18:00.870 [Thread-0] INFO tk.fishfish.easyjava.concurrent.CountDownLatchTest - 我开始执行...
+11:18:00.870 [main] INFO tk.fishfish.easyjava.concurrent.CountDownLatchTest - 等待大家...
+11:18:00.873 [Thread-0] INFO tk.fishfish.easyjava.concurrent.CountDownLatchTest - 我完成了！
+11:18:00.870 [Thread-1] INFO tk.fishfish.easyjava.concurrent.CountDownLatchTest - 我开始执行...
+11:18:00.873 [Thread-1] INFO tk.fishfish.easyjava.concurrent.CountDownLatchTest - 我完成了！
+11:18:00.873 [main] INFO tk.fishfish.easyjava.concurrent.CountDownLatchTest - 大家都完成了！
+```
 
 ## Kafka
 
