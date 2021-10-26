@@ -4002,8 +4002,6 @@ public void put(E e) {
 }
 ```
 
-
-
 ### PriorityBlockingQueue
 
 `PriorityBlockingQueue`是优先级阻塞队列，底层采用数组存储数据，并根据compareTo接口进行排序，利用可重入锁(**ReentrantLock)**来保证在并发情况下的线程安全。
@@ -4677,6 +4675,38 @@ public void onMessage(ConsumerRecord<String, String> record, Acknowledgment ack)
 ## HBase
 
 待续
+
+## arthas
+
+JVM诊断工具。
+
+### trace
+
+计算方法调用时常，可用来分析性能较慢的方法调用。
+
+![arthas-trace](doc/arthas-trace.png)
+
+### watch
+
+参看方法参数，返回值。可通过 -x 参数查看类更深层次信息。
+
+![arthas-watch](doc/arthas-watch.png)
+
+### thread
+
+查看线程信息。
+
+1. 查看阻塞的线程
+
+   ```shell
+   thread -b
+   ```
+
+2. 查看最繁忙的线程(top-10)
+
+   ```
+   thread -n 10
+   ```
 
 ## 待续
 
