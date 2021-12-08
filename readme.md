@@ -26,6 +26,7 @@
 * [Kafka](#Kafka)
 * [Hive](#Hive)
 * [HBase](#HBase)
+* [arthas](#arthas)
 * [待续](#待续)
 * [说明](#说明)
 
@@ -4707,6 +4708,24 @@ JVM诊断工具。
    ```
    thread -n 10
    ```
+
+### sc
+
+查看加载的类信息。
+
+![arthas-sc](doc/arthas-sc.png)
+
+### sm
+
+查看类方法。
+
+![arthas-sm](doc/arthas-sm.png)
+
+### jad
+
+反编译。
+
+![arthas-jad](doc/arthas-jad.png)
 
 ## 待续
 
